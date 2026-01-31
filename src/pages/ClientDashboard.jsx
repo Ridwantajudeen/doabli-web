@@ -99,7 +99,7 @@ export default function ClientDashboard() {
           >
             Logout
           </button>
-          <Link to="/admin" style={{ color: theme.text }}>Admin</Link>
+         
         </div>
 
         {/* MOBILE HAMBURGER */}
