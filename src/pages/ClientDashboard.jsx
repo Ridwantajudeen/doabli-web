@@ -174,13 +174,7 @@ export default function ClientDashboard() {
         Logout
       </button>
 
-      <Link
-        to="/admin"
-        onClick={() => setMobileMenuOpen(false)}
-        style={{ marginTop: '4px', fontSize: '14px', color: theme.text }}
-      >
-        Admin
-      </Link>
+     
     </motion.div>
   )}
 </AnimatePresence>
