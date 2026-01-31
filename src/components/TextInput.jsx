@@ -29,7 +29,7 @@ export default function TextInput({
             border: `1px solid ${error ? Colors.warning : colors.uiBackground}`,
             borderRadius: '12px',
             color: colors.text,
-            fontSize: '14px',
+            fontSize: '16px',
             transition: 'all 0.2s ease',
             boxSizing: 'border-box',
           }}

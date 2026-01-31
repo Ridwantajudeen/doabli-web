@@ -445,7 +445,7 @@ export default function RunnerProfile() {
               borderRadius: '8px',
               color: theme.text,
               fontFamily: 'inherit',
-              fontSize: '14px',
+                fontSize: '16px',
               minHeight: '100px',
               boxSizing: 'border-box',
               resize: 'vertical',

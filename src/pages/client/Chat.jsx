@@ -306,7 +306,7 @@ export default function Chat() {
             border: `1px solid ${theme.uiBackground}`,
             borderRadius: '12px',
             color: theme.text,
-            fontSize: '14px',
+            fontSize: '16px',
             fontFamily: 'inherit',
             resize: 'none',
             maxHeight: '100px',

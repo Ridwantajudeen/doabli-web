@@ -1,0 +1,11 @@
+
+/* Prevent iOS mobile zoom when focusing form controls by ensuring
+	 touch-target font sizes are at least 16px. This avoids the browser
+	 zooming in when an input gains focus. */
+input, textarea, select, button {
+	font-size: 16px;
+	-webkit-text-size-adjust: 100%;
+}
+
+/* For very large desktop text scaling we keep layout consistent */
+body { -webkit-font-smoothing: antialiased; }

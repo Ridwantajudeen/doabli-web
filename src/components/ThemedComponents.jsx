@@ -105,7 +105,7 @@ export function ThemedTextInput({
             border: `1px solid ${error ? Colors.warning : theme.uiBackground}`,
             borderRadius: '12px',
             color: theme.text,
-            fontSize: '14px',
+            fontSize: '16px',
             transition: 'all 0.2s ease',
             boxSizing: 'border-box',
             ...style,

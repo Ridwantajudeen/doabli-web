@@ -207,6 +207,7 @@ export default function CreateErrand() {
                 minHeight: '120px',
                 boxSizing: 'border-box',
                 transition: 'all 0.2s ease',
+                fontSize: '16px',
               }}
             />
             {errors.description && (

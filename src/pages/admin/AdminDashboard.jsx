@@ -738,7 +738,7 @@ export default function AdminDashboard() {
 
               <div style={{ marginBottom: '16px' }}>
                 <p style={{ margin: 0, color: Colors.primary, fontSize: '12px', fontWeight: '600', textTransform: 'uppercase', marginBottom: '8px' }}>Admin Notes (optional)</p>
-                <textarea value={adminNotes} onChange={(e) => setAdminNotes(e.target.value)} placeholder="Add notes for this decision..." style={{ width: '100%', minHeight: '80px', padding: '10px', borderRadius: '8px', border: `1px solid ${Colors.border}`, background: Colors.background, color: Colors.text, fontSize: '14px', fontFamily: 'inherit' }} />
+                <textarea value={adminNotes} onChange={(e) => setAdminNotes(e.target.value)} placeholder="Add notes for this decision..." style={{ width: '100%', minHeight: '80px', padding: '10px', borderRadius: '8px', border: `1px solid ${Colors.border}`, background: Colors.background, color: Colors.text, fontSize: '16px', fontFamily: 'inherit' }} />
               </div>
 
               <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>

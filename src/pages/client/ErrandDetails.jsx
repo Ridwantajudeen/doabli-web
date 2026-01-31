@@ -698,7 +698,7 @@ export default function ErrandDetails() {
                   border: `1px solid ${Colors.secondary}`,
                   borderRadius: '8px',
                   color: Colors.text,
-                  fontSize: '14px',
+                  fontSize: '16px',
                   fontFamily: 'inherit',
                   resize: 'vertical',
                   minHeight: '120px',
