@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { X, Menu } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { ThemedView } from '../components/ThemedComponents';
@@ -7,7 +10,6 @@ import ClientMyErrands from './client/ClientMyErrands';
 import ClientMessages from './client/ClientMessages';
 import ClientNotifications from './client/ClientNotifications';
 import ClientProfile from './client/ClientProfile';
-import { Link } from 'react-router-dom';
 
 export default function ClientDashboard() {
   const { theme, Colors } = useTheme();
@@ -43,7 +45,6 @@ export default function ClientDashboard() {
         flexDirection: 'column'
       }}
     >
-
       {/* NAVBAR */}
       <nav
         style={{
@@ -65,7 +66,7 @@ export default function ClientDashboard() {
         </h2>
 
         {/* DESKTOP NAV */}
-        <div className="desktop-nav" style={{ display: 'flex', gap: '20px' }}>
+        <div className="hidden md:flex gap-6 items-center">
           {tabs.map(tab => (
             <button
               key={tab.id}
@@ -83,7 +84,6 @@ export default function ClientDashboard() {
               {tab.label}
             </button>
           ))}
-
           <button
             onClick={logout}
             style={{
@@ -99,79 +99,96 @@ export default function ClientDashboard() {
           >
             Logout
           </button>
-          <Link to="/admin">Admin</Link>
+          <Link to="/admin" style={{ color: theme.text }}>Admin</Link>
         </div>
 
         {/* MOBILE HAMBURGER */}
         <button
-          className="mobile-menu-btn"
+          className="md:hidden p-2 bg-zinc-800 text-white rounded-full"
           onClick={() => setMobileMenuOpen(prev => !prev)}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: theme.text,
-            fontSize: '24px',
-            display: 'none'
-          }}
         >
-          ☰
+          {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
         </button>
       </nav>
 
-      {/* MOBILE MENU DROPDOWN */}
-      {mobileMenuOpen && (
-        <div
-          className="mobile-nav"
+      {/* MOBILE MENU */}
+     <AnimatePresence>
+  {mobileMenuOpen && (
+    <motion.div
+      initial={{ opacity: 0, y: -20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      transition={{ duration: 0.2 }}
+      style={{
+        position: 'absolute',
+        top: '60px', // just below navbar
+        right: '16px', // align to hamburger button
+        backgroundColor: theme.navBackground,
+        border: `1px solid ${theme.uiBackground}`,
+        borderRadius: '12px',
+        padding: '12px',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+        zIndex: 100,
+        width: '160px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px'
+      }}
+    >
+      {tabs.map(tab => (
+        <button
+          key={tab.id}
+          onClick={() => {
+            setActiveTab(tab.id);
+            setMobileMenuOpen(false);
+          }}
           style={{
-            display: 'flex',
-            flexDirection: 'column',
-            backgroundColor: theme.navBackground,
-            padding: '16px',
-            borderBottom: `1px solid ${theme.uiBackground}`
+            background: 'none',
+            border: 'none',
+            textAlign: 'left',
+            fontSize: '14px',
+            color: activeTab === tab.id ? Colors.primary : theme.text,
+            cursor: 'pointer'
           }}
         >
-          {tabs.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => {
-                setActiveTab(tab.id);
-                setMobileMenuOpen(false);
-              }}
-              style={{
-                padding: '12px 0',
-                background: 'none',
-                border: 'none',
-                textAlign: 'left',
-                fontSize: '16px',
-                color: activeTab === tab.id ? Colors.primary : theme.text,
-                borderBottom: `1px solid ${theme.uiBackground}`
-              }}
-            >
-              {tab.label}
-            </button>
-          ))}
+          {tab.label}
+        </button>
+      ))}
 
-          <button
-            onClick={logout}
-            style={{
-              marginTop: '12px',
-              padding: '12px',
-              backgroundColor: Colors.warning,
-              border: 'none',
-              color: '#fff',
-              borderRadius: '6px'
-            }}
-          >
-            Logout
-          </button>
-        </div>
-      )}
+      <button
+        onClick={() => {
+          logout();
+          setMobileMenuOpen(false);
+        }}
+        style={{
+          marginTop: '8px',
+          padding: '6px',
+          backgroundColor: Colors.warning,
+          border: 'none',
+          color: '#fff',
+          borderRadius: '6px',
+          cursor: 'pointer',
+          fontSize: '14px'
+        }}
+      >
+        Logout
+      </button>
+
+      <Link
+        to="/admin"
+        onClick={() => setMobileMenuOpen(false)}
+        style={{ marginTop: '4px', fontSize: '14px', color: theme.text }}
+      >
+        Admin
+      </Link>
+    </motion.div>
+  )}
+</AnimatePresence>
 
       {/* MAIN CONTENT */}
       <div style={{ flex: 1, padding: '20px' }}>
         {renderContent()}
       </div>
-
     </ThemedView>
   );
 }

@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { ThemedView } from '../components/ThemedComponents';
@@ -7,12 +9,13 @@ import RunnerApplications from './runner/RunnerApplications';
 import RunnerMessages from './runner/RunnerMessages';
 import RunnerNotifications from './runner/RunnerNotifications';
 import RunnerProfile from './runner/RunnerProfile';
+import { Menu, X } from 'lucide-react';
 
 export default function RunnerDashboard() {
   const { theme, Colors } = useTheme();
   const { logout } = useAuth();
-
   const [activeTab, setActiveTab] = useState('home');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const tabs = [
     { id: 'home', label: 'Available Jobs' },
@@ -47,7 +50,7 @@ export default function RunnerDashboard() {
         className="w-full flex justify-between items-center px-6 py-4 sticky top-0 z-50"
         style={{
           backgroundColor: theme.navBackground,
-          borderBottom: `1px solid ${theme.uiBackground}`
+          borderBottom: `1px solid ${theme.uiBackground}`,
         }}
       >
         <h2
@@ -87,13 +90,78 @@ export default function RunnerDashboard() {
 
         {/* Mobile Hamburger */}
         <button
-          onClick={() => setActiveTab(activeTab === 'menu' ? 'home' : 'menu')}
-          className="md:hidden text-2xl"
-          style={{ color: theme.text }}
+          className="md:hidden p-2 bg-zinc-800 text-white rounded-full"
+          onClick={() => setMobileMenuOpen(prev => !prev)}
         >
-          ☰
+          {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
         </button>
       </nav>
+
+      {/* MOBILE MENU */}
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+            style={{
+              position: 'absolute',
+              top: '60px',
+              right: '16px',
+              width: '160px',
+              backgroundColor: theme.navBackground,
+              border: `1px solid ${theme.uiBackground}`,
+              borderRadius: '12px',
+              padding: '12px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+              zIndex: 100,
+            }}
+          >
+            {tabs.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  setMobileMenuOpen(false);
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  textAlign: 'left',
+                  fontSize: '14px',
+                  color: activeTab === tab.id ? Colors.primary : theme.text,
+                  cursor: 'pointer'
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+
+            <button
+              onClick={() => {
+                logout();
+                setMobileMenuOpen(false);
+              }}
+              style={{
+                marginTop: '8px',
+                padding: '6px',
+                backgroundColor: Colors.warning,
+                border: 'none',
+                color: '#fff',
+                borderRadius: '6px',
+                fontSize: '14px',
+                cursor: 'pointer'
+              }}
+            >
+              Logout
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* CONTENT */}
       <div className="p-5 flex-1">

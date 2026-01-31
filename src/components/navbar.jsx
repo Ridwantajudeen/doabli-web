@@ -1,20 +1,16 @@
 import { useState, useEffect } from 'react';
-import { Colors } from '../constants/colors';
-import Button from './Button';
 import { Link } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import Button from './Button';
+import { Colors } from '../constants/colors';
+import { Menu, X } from 'lucide-react';
 
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const [isDark, setIsDark] = useState(true);
   const [scrolled, setScrolled] = useState(false);
 
-  useEffect(() => {
-    const handleScroll = () => {
-      setScrolled(window.scrollY > 10);
-    };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+  const colors = isDark ? Colors.dark : Colors.light;
 
   const navLinks = [
     { label: 'Home', href: '#home' },
@@ -30,7 +26,11 @@ export default function Navbar() {
     setIsOpen(false);
   };
 
-  const colors = isDark ? Colors.dark : Colors.light;
+  useEffect(() => {
+    const handleScroll = () => setScrolled(window.scrollY > 10);
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   return (
     <nav
@@ -65,83 +65,63 @@ export default function Navbar() {
           {/* CTA Buttons */}
           <div className="hidden md:flex gap-3">
             <Link to="/login">
-            <Button variant="ghost" size="md">
-              Sign In
-            </Button>
+              <Button variant="ghost" size="md">
+                Sign In
+              </Button>
             </Link>
             <Link to="/signup">
-            <Button variant="primary" size="md">
-              Sign Up
-            </Button>
+              <Button variant="primary" size="md">
+                Sign Up
+              </Button>
             </Link>
           </div>
 
           {/* Mobile Menu Button */}
           <button
             onClick={() => setIsOpen(!isOpen)}
-            className="md:hidden flex flex-col gap-1"
+            className="md:hidden p-2 bg-zinc-800 text-white rounded-full shadow-lg"
           >
-            <div
-              style={{
-                width: '24px',
-                height: '2px',
-                backgroundColor: colors.text,
-                transition: 'all 0.3s ease',
-                transform: isOpen ? 'rotate(45deg) translateY(10px)' : 'none',
-              }}
-            />
-            <div
-              style={{
-                width: '24px',
-                height: '2px',
-                backgroundColor: colors.text,
-                opacity: isOpen ? 0 : 1,
-                transition: 'all 0.3s ease',
-              }}
-            />
-            <div
-              style={{
-                width: '24px',
-                height: '2px',
-                backgroundColor: colors.text,
-                transition: 'all 0.3s ease',
-                transform: isOpen ? 'rotate(-45deg) translateY(-10px)' : 'none',
-              }}
-            />
+            {isOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
         </div>
 
         {/* Mobile Menu */}
-        {isOpen && (
-          <div
-            style={{
-              backgroundColor: colors.navBackground,
-              borderTop: `1px solid ${colors.uiBackground}`,
-              padding: '16px 0',
-            }}
-          >
-            <div className="flex flex-col gap-4 px-4 pb-4">
+        <AnimatePresence>
+          {isOpen && (
+            <motion.div
+              initial={{ opacity: 0, x: 50 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 50 }}
+              transition={{ duration: 0.3 }}
+              style={{ backgroundColor: colors.navBackground }}
+              className="absolute top-16 right-4 w-44 rounded-xl shadow-lg p-4 flex flex-col space-y-4 md:hidden"
+            >
               {navLinks.map((link) => (
                 <button
                   key={link.href}
                   onClick={() => handleNavClick(link.href)}
                   style={{ color: colors.text }}
-                  className="text-left hover:opacity-80 transition-opacity font-medium"
+                  className="text-left hover:text-purple-400 transition font-medium"
                 >
                   {link.label}
                 </button>
               ))}
+
               <div className="flex flex-col gap-2 pt-4 border-t" style={{ borderColor: colors.uiBackground }}>
-                <Button variant="ghost" size="md" className="w-full">
-                  Sign In
-                </Button>
-                <Button variant="primary" size="md" className="w-full">
-                  Sign Up
-                </Button>
+                <Link to="/login">
+                  <Button variant="ghost" size="md" className="w-full">
+                    Sign In
+                  </Button>
+                </Link>
+                <Link to="/signup">
+                  <Button variant="primary" size="md" className="w-full">
+                    Sign Up
+                  </Button>
+                </Link>
               </div>
-            </div>
-          </div>
-        )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </nav>
   );
