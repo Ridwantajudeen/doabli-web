@@ -617,7 +617,7 @@ export default function AdminDashboard() {
                   {disputes.map((dispute) => (
                     <tr key={dispute.id} style={{ borderBottom: `1px solid ${Colors.border}` }}>
                       <td style={{ padding: '12px', color: Colors.text, fontSize: '14px', fontWeight: '600' }}>{formatNaira(dispute.amount)}</td>
-                      <td style={{ padding: '12px', color: Colors.muted, fontSize: '12px' }}>{dispute.dispute_reason || 'No reason provided'}</td>
+                      <td style={{ padding: '12px', color: Colors.muted, fontSize: '12px' }}>{dispute.dispute_details || dispute.dispute_reason || 'No reason provided'}</td>
                       <td style={{ padding: '12px', color: Colors.text, fontSize: '14px' }}>{new Date(dispute.created_at).toLocaleDateString()}</td>
                       <td style={{ padding: '12px', textAlign: 'center' }}>
                         <button
