@@ -1,3 +1,5 @@
+//lib/supabase.js
+
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -74,7 +76,7 @@ export const createProfile = async (userId, profileData) => {
       .from('profiles')
       .insert([
         {
-          user_id: userId,
+          id: userId,
           email: profileData.email,
           first_name: profileData.firstName,
           last_name: profileData.lastName,
@@ -85,11 +87,13 @@ export const createProfile = async (userId, profileData) => {
       .select();
 
     if (error) {
+      console.error('Profile creation error:', error);
       throw new Error(error.message);
     }
 
-    return { profile: data[0], error: null };
+    return { profile: data?.[0] || null, error: null };
   } catch (err) {
+    console.error('Create profile exception:', err.message);
     return { profile: null, error: err.message };
   }
 };
@@ -99,7 +103,7 @@ export const getProfile = async (userId) => {
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
-      .eq('user_id', userId)
+      .eq('id', userId)
       .single();
 
     if (error && error.code !== 'PGRST116') {
@@ -117,12 +121,10 @@ export const updateProfile = async (userId, updates) => {
     const { data, error } = await supabase
       .from('profiles')
       .update(updates)
-      .eq('user_id', userId)
+      .eq('id', userId)
       .select();
 
-    if (error) {
-      throw new Error(error.message);
-    }
+    if (error) throw new Error(error.message);
 
     return { profile: data[0], error: null };
   } catch (err) {

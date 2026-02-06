@@ -9,9 +9,9 @@ export default defineConfig({
   tailwindcss(),],
   server: {
     proxy: {
-      '/escrow': 'http://localhost:5000',
-      '/pay': 'http://localhost:5000',
-      '/review': 'http://localhost:5000',
+      '/api/escrow': 'http://localhost:5000',
+      '/api/pay': 'http://localhost:5000',
+      '/api/review': 'http://localhost:5000',
     },
   },
 })

@@ -5,14 +5,15 @@ import { useAuth } from '../../context/AuthContext';
 import { ThemedText, ThemedCard } from '../../components/ThemedComponents';
 import Button from '../../components/Button';
 import { useNavigate } from 'react-router-dom';
+import { FiMessageSquare, FiClipboard, FiCheck, FiX, FiAward, FiBell } from 'react-icons/fi';
 
 const notificationIcons = {
-  messages: '💬',
-  applications: '📋',
-  accepted: '✅',
-  rejected: '❌',
-  completed: '🎉',
-  default: '🔔',
+  messages: FiMessageSquare,
+  applications: FiClipboard,
+  accepted: FiCheck,
+  rejected: FiX,
+  completed: FiAward,
+  default: FiBell,
 };
 
 export default function RunnerNotifications() {

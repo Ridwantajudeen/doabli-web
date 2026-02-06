@@ -2,10 +2,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
+import { showError } from '../../lib/notify';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { ThemedText, ThemedTextInput, ThemedCard } from '../../components/ThemedComponents';
 import Button from '../../components/Button';
+import { FiArrowLeft, FiUser, FiMessageSquare } from 'react-icons/fi';
 
 export default function Chat() {
   const { partnerId } = useParams();
@@ -39,7 +41,7 @@ export default function Chat() {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('user_id', partnerId)
+        .eq('id', partnerId)
         .single();
 
       if (error) throw error;
@@ -72,7 +74,7 @@ export default function Chat() {
       setMessageText('');
     },
     onError: (err) => {
-      alert('Failed to send message: ' + err.message);
+      showError('send-message', err);
     },
   });
 
@@ -171,7 +173,7 @@ export default function Chat() {
               fontWeight: 'bold',
             }}
           >
-            ←
+          <FiArrowLeft size={24} />
           </button>
 
           <div
@@ -186,7 +188,7 @@ export default function Chat() {
               fontSize: '24px',
             }}
           >
-            👤
+            <FiUser size={32} />
           </div>
 
           <div>
@@ -226,7 +228,7 @@ export default function Chat() {
       >
         {messages.length === 0 ? (
           <div style={{ textAlign: 'center', opacity: 0.6, margin: 'auto' }}>
-            <div style={{ fontSize: '48px', marginBottom: '12px' }}>💬</div>
+            <div style={{ fontSize: '48px', marginBottom: '12px', display: 'flex', justifyContent: 'center', color: Colors.primary }}><FiMessageSquare size={48} /></div>
             <ThemedText>Start the conversation!</ThemedText>
           </div>
         ) : (

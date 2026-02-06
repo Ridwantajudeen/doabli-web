@@ -1,10 +1,12 @@
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
+import { showSuccess } from '../../lib/notify';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { ThemedView, ThemedText, ThemedCard } from '../../components/ThemedComponents';
 import Button from '../../components/Button';
+import { FiEdit, FiX, FiLogOut, FiUser, FiCamera, FiArrowLeft, FiStar } from 'react-icons/fi';
 
 export default function RunnerProfile() {
   const { id: runnerId } = useParams();
@@ -22,7 +24,7 @@ export default function RunnerProfile() {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('user_id', runnerId)
+        .eq('id', runnerId)
         .single();
 
       if (error) throw error;
@@ -50,7 +52,7 @@ export default function RunnerProfile() {
     queryKey: ['reviews', runnerId],
     queryFn: async () => {
       const apiUrl = import.meta.env.VITE_API_URL || '';
-      const response = await fetch(`${apiUrl}/review/runner/${runnerId}?page=1&limit=5`);
+      const response = await fetch(`${apiUrl}/api/review/runner/${runnerId}?page=1&limit=5`);
       if (!response.ok) throw new Error('Failed to fetch reviews');
       const data = await response.json();
       return data.reviews || [];
@@ -79,7 +81,7 @@ export default function RunnerProfile() {
         .eq('errand_id', errandId);
     },
     onSuccess: () => {
-      alert('Runner accepted!');
+      showSuccess('Runner accepted!');
       navigate('/client/errands');
     },
   });
@@ -124,27 +126,36 @@ export default function RunnerProfile() {
           marginBottom: '20px',
           fontSize: '16px',
           fontWeight: '600',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '4px',
         }}
       >
-        ← Back
+        <FiArrowLeft size={16} /> Back
       </button>
 
       {/* Avatar */}
-      <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginBottom: '24px',
+        }}
+      >
         <div
           style={{
-            width: '120px',
-            height: '120px',
-            borderRadius: '60px',
+            width: '80px',
+            height: '80px',
+            borderRadius: '50%',
             backgroundColor: Colors.primary + '20',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: '64px',
-            margin: '0 auto',
+            color: Colors.primary,
           }}
         >
-          👤
+          <FiUser size={40} />
         </div>
       </div>
 
@@ -158,7 +169,7 @@ export default function RunnerProfile() {
         </ThemedText>
         {runner.average_rating > 0 && (
           <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
-            <span>⭐ {runner.average_rating.toFixed(1)}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><FiStar size={14} fill="currentColor" /> {runner.average_rating.toFixed(1)}</span>
             <ThemedText style={{ fontSize: '14px', opacity: 0.6 }}>
               ({runner.completed_errands || 0} completed)
             </ThemedText>

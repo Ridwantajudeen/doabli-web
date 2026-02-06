@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
+import { showError, showSuccess } from '../../lib/notify';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { ThemedView, ThemedText, ThemedTextInput } from '../../components/ThemedComponents';
@@ -97,11 +98,11 @@ export default function CreateErrand() {
       return errandData;
     },
     onSuccess: () => {
-      alert(runnerId ? 'Offer sent to runner!' : 'Errand posted successfully!');
+      showSuccess(runnerId ? 'Offer sent to runner!' : 'Errand posted successfully!');
       navigate('/client/errands');
     },
     onError: (err) => {
-      alert('Error: ' + err.message);
+      showError('generic', err);
     },
   });
 
@@ -130,14 +131,14 @@ export default function CreateErrand() {
       },
       onClose: function () {
         setIsPaying(false);
-        alert('Payment cancelled');
+        showError('generic', 'Payment cancelled');
       },
     });
     if (handler) {
       setIsPaying(true);
       handler.openIframe();
     } else {
-      alert('Paystack not loaded');
+      showError('generic', 'Paystack not loaded');
     }
   };
 

@@ -5,6 +5,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import Button from '../components/Button';
 import { ThemedView, ThemedCard, ThemedText, ThemedTextInput } from '../components/ThemedComponents';
+import { friendlyMessage } from '../lib/notify';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -80,7 +81,7 @@ export default function Login() {
       }
     } catch (err) {
       console.error('Login exception:', err);
-      setServerMessage(err.message || 'Login failed. Try again.');
+      setServerMessage(friendlyMessage('login', err));
       setLoading(false);
     }
   };

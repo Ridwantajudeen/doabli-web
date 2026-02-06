@@ -4,6 +4,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { ThemedText, ThemedCard } from '../../components/ThemedComponents';
 import { useNavigate } from 'react-router-dom';
+import { FiMessageSquare } from 'react-icons/fi';
 
 export default function ClientMessages() {
   const navigate = useNavigate();
@@ -73,7 +74,7 @@ export default function ClientMessages() {
         </div>
       ) : conversations.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-          <div style={{ fontSize: '48px', marginBottom: '12px' }}>💬</div>
+          <div style={{ fontSize: '48px', marginBottom: '12px', display: 'flex', justifyContent: 'center', color: Colors.primary }}><FiMessageSquare size={48} /></div>
           <ThemedText
             title
             style={{

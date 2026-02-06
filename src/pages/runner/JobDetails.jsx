@@ -2,21 +2,27 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { showError, showSuccess } from '../../lib/notify';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { ThemedText, ThemedCard } from '../../components/ThemedComponents';
 import Button from '../../components/Button';
+import { FiArrowLeft, FiMapPin, FiClock, FiCheck, FiAlertTriangle, FiX, FiCamera, FiDollarSign, FiUser } from 'react-icons/fi';
 
 export default function JobDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { theme, Colors } = useTheme();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   
   // State for mark done with optional image
   const [showMarkDoneModal, setShowMarkDoneModal] = useState(false);
   const [completionImage, setCompletionImage] = useState(null);
+
+  // ✅ NEW: State for withdrawal flow
+  const [showWithdrawalModal, setShowWithdrawalModal] = useState(false);
+  const [withdrawalStep, setWithdrawalStep] = useState('confirm'); // 'confirm' or 'processing'
 
   // Fetch job
   const { data: job, isLoading, error } = useQuery({
@@ -64,13 +70,29 @@ export default function JobDetails() {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('user_id', job?.posted_by)
+        .eq('id', job?.posted_by)
         .single();
 
       if (error) throw error;
       return data;
     },
     enabled: !!job?.posted_by,
+  });
+
+  // ✅ NEW: Fetch runner's bank account details
+  const { data: bankAccount } = useQuery({
+    queryKey: ['runner-bank-account', profile?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('bank_accounts')
+        .select('*')
+        .eq('user_id', user?.id)
+        .single();
+
+      // It's OK if there's no bank account yet
+      return data || null;
+    },
+    enabled: !!user?.id,
   });
 
   // Check if already applied
@@ -105,11 +127,11 @@ export default function JobDetails() {
       if (error) throw error;
     },
     onSuccess: () => {
-      alert('Application sent!');
-      queryClient.invalidateQueries(['my-application', id, user?.id]);
+      showSuccess('Application sent!');
+      queryClient.invalidateQueries({ queryKey: ['my-application', id, user?.id] });
     },
     onError: (err) => {
-      alert('Error: ' + err.message);
+      showError('send-message', err);
     },
   });
 
@@ -128,7 +150,7 @@ export default function JobDetails() {
         });
       }
 
-      const res = await fetch(`${apiBase}/escrow/mark-done`, {
+     const res = await fetch(`${apiBase}/api/escrow/mark-done`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -151,15 +173,89 @@ export default function JobDetails() {
       return data;
     },
     onSuccess: () => {
-      alert('Job marked as done! Waiting for client confirmation.');
+      showSuccess('Job marked as done! Waiting for client confirmation.');
       setCompletionImage(null);
       setShowMarkDoneModal(false);
-      queryClient.invalidateQueries(['job', id]);
+      queryClient.invalidateQueries({ queryKey: ['job', id] });
     },
     onError: (err) => {
-      alert('Error: ' + err.message);
+      showError('generic', err);
     },
   });
+
+  // ✅ NEW: Process Withdrawal Mutation
+  const withdrawalMutation = useMutation({
+    mutationFn: async () => {
+      const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+      // ✅ Send only escrow_id - backend handles everything else
+      const res = await fetch(`${apiBase}/api/pay/withdrawals`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          escrow_id: job?.escrow_id,
+          profile_id: profile?.id,
+          user_id: user?.id,
+        }),
+      });
+
+      let data = null;
+      try {
+        data = await res.json();
+      } catch (e) {
+        console.error('Failed parsing withdrawal response', e);
+      }
+
+      console.log('[withdrawal] response:', res.status, data);
+
+      if (!res.ok) {
+        throw new Error((data && data.error) || 'Failed to process withdrawal');
+      }
+
+      return data;
+    },
+    onSuccess: () => {
+      setWithdrawalStep('processing');
+        setTimeout(() => {
+        showSuccess('Withdrawal successful! Money will arrive in 1-3 business days.');
+        setShowWithdrawalModal(false);
+        setWithdrawalStep('confirm');
+        queryClient.invalidateQueries({ queryKey: ['escrow', job?.escrow_id] });
+      }, 2000);
+    },
+    onError: (err) => {
+      showError('withdrawal', err);
+      setWithdrawalStep('confirm');
+    },
+  });
+
+  // ✅ Helper: Calculate withdrawal details
+  const calculateWithdrawalDetails = () => {
+    if (!escrow) return null;
+
+    const amount = Number(escrow.runner_earnings) || 0;
+    const fee = (amount * 5) / 100;
+    const netAmount = amount - fee;
+
+    return {
+      grossAmount: amount,
+      fee,
+      netAmount,
+    };
+  };
+
+  const withdrawalDetails = calculateWithdrawalDetails();
+
+  // ✅ Helper: Check if runner can withdraw
+  const canWithdraw = () => {
+    if (!escrow) return false;
+    if (escrow.status !== 'released' && escrow.status !== 'releasable') return false;
+    if (escrow.client_status !== 'confirmed') return false;
+    if (escrow.withdrawn_at) return false; // Already withdrawn
+    if (!bankAccount) return false; // No bank account saved
+    if (!profile?.kyc_verified) return false; // Needs KYC for now (optional based on limits)
+    return true;
+  };
 
   if (isLoading) {
     return (
@@ -193,9 +289,12 @@ export default function JobDetails() {
           marginBottom: '20px',
           fontSize: '16px',
           fontWeight: '600',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '4px',
         }}
       >
-        ← Back
+        <FiArrowLeft size={16} /> Back
       </button>
 
       {/* Title & Budget */}
@@ -232,7 +331,7 @@ export default function JobDetails() {
           <ThemedText style={{ fontSize: '12px', opacity: 0.6, marginBottom: '4px', display: 'block' }}>
             Location
           </ThemedText>
-          <ThemedText style={{ fontSize: '14px', display: 'block' }}>📍 {job.location}</ThemedText>
+          <ThemedText style={{ fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}><FiMapPin size={14} /> {job.location}</ThemedText>
         </div>
 
         <div style={{ borderTop: `1px solid ${theme.uiBackground}`, margin: '12px 0' }} />
@@ -280,10 +379,10 @@ export default function JobDetails() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: '32px',
+                color: Colors.primary,
               }}
             >
-              👤
+              <FiUser size={24} />
             </div>
 
             <div>
@@ -319,8 +418,8 @@ export default function JobDetails() {
           {/* Awaiting Client Approval */}
           {escrow.runner_status === 'completed' && escrow.client_status === 'pending' && (
             <div style={{ padding: '12px', backgroundColor: '#f59e0b20', borderRadius: '8px', marginBottom: '12px' }}>
-              <ThemedText style={{ color: '#f59e0b', fontWeight: '600', marginBottom: '4px', display: 'block' }}>
-                ⏳ Awaiting Client Approval
+              <ThemedText style={{ color: '#f59e0b', fontWeight: '600', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <FiClock size={16} /> Awaiting Client Approval
               </ThemedText>
               <ThemedText style={{ fontSize: '13px', opacity: 0.7, display: 'block' }}>
                 Your work has been submitted. The client has 7 days to review and confirm.
@@ -328,28 +427,61 @@ export default function JobDetails() {
             </div>
           )}
 
-          {/* Payment Available for Withdrawal */}
+          {/* ✅ NEW: Payment Available for Withdrawal */}
           {(escrow.status === 'released' || escrow.status === 'releasable') && escrow.client_status === 'confirmed' && (
             <div style={{ padding: '12px', backgroundColor: '#22c55e20', borderRadius: '8px', marginBottom: '12px' }}>
-              <ThemedText style={{ color: '#22c55e', fontWeight: '600', marginBottom: '4px', display: 'block' }}>
-                ✓ Payment Available for Withdrawal
+              <ThemedText style={{ color: '#22c55e', fontWeight: '600', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <FiCheck size={16} /> Payment Available for Withdrawal
               </ThemedText>
               <ThemedText style={{ fontSize: '13px', opacity: 0.7, display: 'block' }}>
-                The client approved your work. You can now withdraw your payment.
+                The client approved your work. You can now withdraw your earnings.
               </ThemedText>
-              {escrow.release_at && (
-                <ThemedText style={{ fontSize: '12px', opacity: 0.6, marginTop: '6px', display: 'block' }}>
-                  Available since: {new Date(escrow.release_at).toLocaleDateString()}
-                </ThemedText>
+              {withdrawalDetails && (
+                <div style={{ marginTop: '12px', padding: '12px', backgroundColor: 'rgba(255,255,255,0.5)', borderRadius: '6px' }}>
+                  <ThemedText style={{ fontSize: '13px', marginBottom: '6px', display: 'block' }}>
+                    Earnings breakdown:
+                  </ThemedText>
+                  <div style={{ fontSize: '12px', opacity: 0.8, display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span>Gross amount:</span>
+                    <span>₦{withdrawalDetails.grossAmount.toLocaleString()}</span>
+                  </div>
+                  <div style={{ fontSize: '12px', opacity: 0.8, display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span>Platform fee (5%):</span>
+                    <span>₦{withdrawalDetails.fee.toLocaleString()}</span>
+                  </div>
+                  <div style={{
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    paddingTop: '8px',
+                    borderTop: '1px solid rgba(0,0,0,0.1)',
+                  }}>
+                    <span>You will receive:</span>
+                    <span>₦{withdrawalDetails.netAmount.toLocaleString()}</span>
+                  </div>
+                </div>
               )}
             </div>
           )}
 
+          {/* Already Withdrawn */}
+          {escrow.withdrawn_at && (
+            <div style={{ padding: '12px', backgroundColor: '#8b5cf620', borderRadius: '8px', marginBottom: '12px' }}>
+              <ThemedText style={{ color: '#8b5cf6', fontWeight: '600', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <FiCheck size={16} /> Payment Withdrawn
+              </ThemedText>
+              <ThemedText style={{ fontSize: '13px', opacity: 0.7, display: 'block' }}>
+                Withdrawn on {new Date(escrow.withdrawn_at).toLocaleDateString()}
+              </ThemedText>
+            </div>
+          )}
+
           {/* Dispute Raised */}
-          {escrow.status === 'disputed' || escrow.client_status === 'disputed' && (
+          {(escrow.status === 'disputed' || escrow.client_status === 'disputed') && (
             <div style={{ padding: '12px', backgroundColor: '#ef444420', borderRadius: '8px', marginBottom: '12px' }}>
-              <ThemedText style={{ color: '#ef4444', fontWeight: '600', marginBottom: '4px', display: 'block' }}>
-                ⚠️ Dispute Raised
+              <ThemedText style={{ color: '#ef4444', fontWeight: '600', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <FiAlertTriangle size={16} /> Dispute Raised
               </ThemedText>
               <ThemedText style={{ fontSize: '13px', opacity: 0.7, display: 'block' }}>
                 The client has raised a dispute. Our support team will review and resolve this.
@@ -359,7 +491,7 @@ export default function JobDetails() {
         </ThemedCard>
       )}
 
-      {/* Apply Button */}
+      {/* Action Buttons */}
       <div style={{ display: 'grid', gap: '12px' }}>
         {existingApp ? (
           <div
@@ -370,8 +502,8 @@ export default function JobDetails() {
               textAlign: 'center',
             }}
           >
-            <ThemedText style={{ color: Colors.primary, fontWeight: '600' }}>
-              ✓ You already applied ({existingApp.status})
+            <ThemedText style={{ color: Colors.primary, fontWeight: '600', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+              <FiCheck size={16} /> You already applied ({existingApp.status})
             </ThemedText>
           </div>
         ) : (
@@ -393,6 +525,31 @@ export default function JobDetails() {
         >
           Browse More Jobs
         </Button>
+
+        {/* ✅ NEW: Withdraw Button */}
+        {canWithdraw() && (
+          <Button
+            variant="primary"
+            size="md"
+            onClick={() => setShowWithdrawalModal(true)}
+            style={{ width: '100%', backgroundColor: '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+          >
+            <FiDollarSign size={18} /> Withdraw Payment
+          </Button>
+        )}
+
+        {/* Show reason if can't withdraw */}
+        {!canWithdraw() && escrow && escrow.status === 'released' && (
+          <div style={{ padding: '12px', backgroundColor: '#ef444420', borderRadius: '8px', textAlign: 'center' }}>
+            <ThemedText style={{ fontSize: '13px', color: '#ef4444' }}>
+              {!bankAccount
+                ? '❌ Add bank account details to withdraw'
+                : !profile?.kyc_verified
+                ? '❌ Complete KYC verification to withdraw'
+                : '❌ Not eligible for withdrawal yet'}
+            </ThemedText>
+          </div>
+        )}
 
         {/* Runner: Mark Job as Done */}
         {existingApp?.status === 'accepted' && (!escrow || escrow.runner_status !== 'completed') && job.escrow_id && (
@@ -442,12 +599,13 @@ export default function JobDetails() {
                 right: '12px',
                 background: 'none',
                 border: 'none',
-                fontSize: '24px',
                 cursor: 'pointer',
                 opacity: 0.6,
+                color: Colors.text,
+                padding: '4px',
               }}
             >
-              ✕
+              <FiX size={20} />
             </button>
 
             <ThemedText
@@ -496,8 +654,8 @@ export default function JobDetails() {
               >
                 {completionImage ? (
                   <div>
-                    <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: Colors.primary }}>
-                      ✓ Image Selected
+                    <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: Colors.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                      <FiCheck size={16} /> Image Selected
                     </div>
                     <div style={{ fontSize: '12px', opacity: 0.6 }}>
                       {completionImage.name}
@@ -523,8 +681,8 @@ export default function JobDetails() {
                   </div>
                 ) : (
                   <div>
-                    <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px' }}>
-                      📷 Click to upload image
+                    <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                      <FiCamera size={16} /> Click to upload image
                     </div>
                     <div style={{ fontSize: '12px', opacity: 0.6 }}>
                       or drag and drop
@@ -564,6 +722,160 @@ export default function JobDetails() {
                 {markDoneMutation.isPending ? 'Submitting...' : 'Submit'}
               </Button>
             </div>
+          </ThemedCard>
+        </div>
+      )}
+
+      {/* ✅ NEW: Withdrawal Modal */}
+      {showWithdrawalModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 1000,
+          }}
+          onClick={() => {
+            if (withdrawalStep === 'confirm') {
+              setShowWithdrawalModal(false);
+            }
+          }}
+        >
+          <ThemedCard
+            style={{
+              width: '100%',
+              maxWidth: '500px',
+              padding: '24px',
+              position: 'relative',
+              cursor: 'default',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {withdrawalStep === 'confirm' && (
+              <button
+                onClick={() => setShowWithdrawalModal(false)}
+                style={{
+                  position: 'absolute',
+                  top: '12px',
+                  right: '12px',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  opacity: 0.6,
+                  color: Colors.text,
+                  padding: '4px',
+                }}
+              >
+                <FiX size={20} />
+              </button>
+            )}
+
+            {withdrawalStep === 'confirm' ? (
+              <>
+                <ThemedText
+                  title
+                  style={{
+                    fontSize: '22px',
+                    fontWeight: '700',
+                    marginBottom: '16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    color: Colors.primary,
+                  }}
+                >
+                  <FiDollarSign size={24} /> Withdraw Your Earnings
+                </ThemedText>
+
+                {withdrawalDetails && (
+                  <>
+                    <div style={{ backgroundColor: '#f0f9ff', borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
+                      <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '8px' }}>Earnings Breakdown:</div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '14px' }}>
+                        <span>Gross Amount:</span>
+                        <span>₦{withdrawalDetails.grossAmount.toLocaleString()}</span>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', fontSize: '14px', opacity: 0.7 }}>
+                        <span>Platform Fee (5%):</span>
+                        <span>-₦{withdrawalDetails.fee.toLocaleString()}</span>
+                      </div>
+
+                      <div style={{ borderTop: '1px solid rgba(0,0,0,0.1)', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', fontSize: '16px', fontWeight: '600', color: Colors.primary }}>
+                        <span>You will receive:</span>
+                        <span>₦{withdrawalDetails.netAmount.toLocaleString()}</span>
+                      </div>
+                    </div>
+
+                    {bankAccount && (
+                      <div style={{ backgroundColor: '#f3e5f520', borderRadius: '8px', padding: '12px', marginBottom: '16px', fontSize: '13px' }}>
+                        <div style={{ opacity: 0.7, marginBottom: '4px' }}>Transfer to:</div>
+                        <div style={{ fontWeight: '600', marginBottom: '2px' }}>
+                          {bankAccount.account_name}
+                        </div>
+                        <div style={{ opacity: 0.7, fontSize: '12px' }}>
+                          {bankAccount.bank_name}
+                        </div>
+                        <div style={{ opacity: 0.7, fontSize: '12px' }}>
+                          {bankAccount.account_number}
+                        </div>
+                      </div>
+                    )}
+
+                    <ThemedText style={{ fontSize: '13px', marginBottom: '16px', opacity: 0.7, display: 'block' }}>
+                      Money will be transferred immediately. Check your bank account in 1-3 business days.
+                    </ThemedText>
+                  </>
+                )}
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <Button
+                    variant="ghost"
+                    onClick={() => setShowWithdrawalModal(false)}
+                    style={{ width: '100%' }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={() => withdrawalMutation.mutate()}
+                    disabled={withdrawalMutation.isPending}
+                    style={{ width: '100%', backgroundColor: '#22c55e' }}
+                  >
+                    {withdrawalMutation.isPending ? 'Processing...' : 'Confirm Withdrawal'}
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+                <div style={{ fontSize: '48px', marginBottom: '16px', color: Colors.success }}><FiCheck size={48} /></div>
+                <ThemedText
+                  title
+                  style={{
+                    fontSize: '22px',
+                    fontWeight: '700',
+                    marginBottom: '12px',
+                    display: 'block',
+                    color: Colors.primary,
+                  }}
+                >
+                  Withdrawal Successful!
+                </ThemedText>
+                <ThemedText style={{ fontSize: '14px', opacity: 0.7, marginBottom: '24px', display: 'block' }}>
+                  ₦{withdrawalDetails?.netAmount.toLocaleString()} has been sent to your bank account.
+                </ThemedText>
+                <ThemedText style={{ fontSize: '13px', opacity: 0.6, display: 'block' }}>
+                  Money will arrive in 1-3 business days.
+                </ThemedText>
+              </div>
+            )}
           </ThemedCard>
         </div>
       )}

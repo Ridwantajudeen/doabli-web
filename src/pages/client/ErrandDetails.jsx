@@ -2,11 +2,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { showError, showSuccess } from '../../lib/notify';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { ThemedView, ThemedText, ThemedCard } from '../../components/ThemedComponents';
 import Button from '../../components/Button';
-import { FiClock, FiUser, FiCheck, FiX, FiMapPin, FiStar } from 'react-icons/fi';
+import { FiClock, FiUser, FiCheck, FiX, FiMapPin, FiStar, FiArrowLeft, FiAlertTriangle, FiCamera } from 'react-icons/fi';
 
 const STATUS_CONFIG = {
   posted: { color: '#3b82f6', label: 'Posted', icon: <FiClock /> },
@@ -74,7 +75,7 @@ export default function ErrandDetails() {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('user_id', errand.assigned_to)
+        .eq('id', errand.assigned_to)
         .single();
 
       if (error) throw error;
@@ -111,25 +112,34 @@ export default function ErrandDetails() {
     enabled: !!errand && !errand.assigned_to,
   });
 
-  // Confirm job completion and release payment
+  // Confirm job completion and release payment - use backend so runner_earnings is calculated
   const confirmMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
-        .from('escrow')
-        .update({
-          client_status: 'confirmed',
-          status: 'released',
-          release_at: new Date(),
-        })
-        .eq('id', escrow.id);
+      const apiUrl = import.meta.env.VITE_API_URL || '';
+      const token = (await supabase.auth.getSession()).data.session?.access_token || '';
+      const response = await fetch(`${apiUrl}/api/escrow/confirm`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: token ? `Bearer ${token}` : undefined,
+        },
+        body: JSON.stringify({ escrow_id: escrow.id, user_id: profile?.id || user.id }),
+      });
 
-      if (error) throw error;
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to confirm escrow');
+      }
+
+      return await response.json();
     },
     onSuccess: () => {
-      alert('Job accepted! Payment is now available for withdrawal.');
+      showSuccess('Job accepted! Payment is now available for withdrawal.');
+      // Refresh the page to fetch updated escrow with runner_earnings
+      window.location.reload();
     },
     onError: (err) => {
-      alert('Error: ' + err.message);
+      showError('generic', err);
     },
   });
 
@@ -147,7 +157,7 @@ export default function ErrandDetails() {
       }
 
       const apiUrl = import.meta.env.VITE_API_URL || '';
-      const response = await fetch(`${apiUrl}/escrow/raise-dispute`, {
+      const response = await fetch(`${apiUrl}/api/escrow/raise-dispute`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -169,13 +179,13 @@ export default function ErrandDetails() {
       return await response.json();
     },
     onSuccess: () => {
-      alert('Dispute raised successfully. Our support team will review it shortly.');
+      showSuccess('Dispute raised successfully. Our support team will review it shortly.');
       setShowDisputeModal(false);
       setDisputeDetails('');
       setDisputeImage(null);
     },
     onError: (err) => {
-      alert('Error: ' + err.message);
+      showError('generic', err);
     },
   });
 
@@ -192,7 +202,7 @@ export default function ErrandDetails() {
       }
 
       const apiUrl = import.meta.env.VITE_API_URL || '';
-      const response = await fetch(`${apiUrl}/escrow/defend-dispute`, {
+      const response = await fetch(`${apiUrl}/api/escrow/defend-dispute`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -214,13 +224,13 @@ export default function ErrandDetails() {
       return await response.json();
     },
     onSuccess: () => {
-      alert('Defense submitted successfully. Our support team will review both sides.');
+      showSuccess('Defense submitted successfully. Our support team will review both sides.');
       setShowDefenseModal(false);
       setDefenseDetails('');
       setDefenseImage(null);
     },
     onError: (err) => {
-      alert('Error: ' + err.message);
+      showError('generic', err);
     },
   });
 
@@ -257,11 +267,11 @@ export default function ErrandDetails() {
       }
     },
     onSuccess: () => {
-      alert('Review submitted!');
+      showSuccess('Review submitted!');
       setReviewData({ rating: 5, comment: '' });
     },
     onError: (err) => {
-      alert('Error: ' + err.message);
+      showError('generic', err);
     },
   });
 
@@ -275,7 +285,7 @@ export default function ErrandDetails() {
       if (error) throw error;
     },
     onSuccess: () => {
-      alert('Errand canceled');
+      showSuccess('Errand canceled');
       navigate('/client/errands');
     },
   });
@@ -328,15 +338,21 @@ export default function ErrandDetails() {
           marginBottom: '20px',
           fontSize: '16px',
           fontWeight: '600',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '4px',
         }}
       >
-        ← Back
+        <FiArrowLeft size={16} /> Back
       </button>
 
       {/* Title & Status */}
       <div style={{ marginBottom: '24px' }}>
-        <div style={{ display: 'flex', gap: '16px', alignItems: 'start', marginBottom: '12px' }}>
-          <ThemedText title style={{ fontSize: '32px', fontWeight: 'bold', flex: 1, display: 'block' }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'start', marginBottom: '8px' }}>
+          <ThemedText
+            title
+            style={{ fontSize: '32px', fontWeight: 'bold', flex: 1, display: 'block' }}
+          >
             {errand.title}
           </ThemedText>
           <div
@@ -348,6 +364,9 @@ export default function ErrandDetails() {
               fontSize: '14px',
               fontWeight: '600',
               whiteSpace: 'nowrap',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
             }}
           >
             {config.icon} {config.label}
@@ -763,8 +782,8 @@ export default function ErrandDetails() {
                   </div>
                 ) : (
                   <div>
-                    <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px' }}>
-                      📷 Click to upload image
+                    <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                      <FiCamera size={16} /> Click to upload image
                     </div>
                     <div style={{ fontSize: '12px', opacity: 0.6 }}>
                       or drag and drop

@@ -3,10 +3,12 @@ import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
+import { showError, showSuccess } from '../../lib/notify';
 import { ThemedText, ThemedCard, ThemedTextInput } from '../../components/ThemedComponents';
 import Button from '../../components/Button';
-import { FiEdit, FiX, FiLogOut, FiUser, FiCamera } from 'react-icons/fi';
+import { FiEdit, FiX, FiLogOut, FiUser, FiCamera, FiCheckCircle, FiAlertCircle, FiClock } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
+import KYCVerificationModal from '../../components/KYCVerificationModal';
 
 export default function RunnerProfile() {
   const navigate = useNavigate();
@@ -15,6 +17,7 @@ export default function RunnerProfile() {
   const [isEditing, setIsEditing] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [showKYCModal, setShowKYCModal] = useState(false);
 
   // Form fields
   const [bio, setBio] = useState('');
@@ -22,6 +25,30 @@ export default function RunnerProfile() {
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // Bank account fields
+  const [bankAccountNumber, setBankAccountNumber] = useState('');
+  const [selectedBankCode, setSelectedBankCode] = useState('');
+  const [selectedBankName, setSelectedBankName] = useState('');
+  const [bankAccountName, setBankAccountName] = useState('');
+  const [bankStatus, setBankStatus] = useState('pending');
+  const [bankSearchQuery, setBankSearchQuery] = useState('');
+  const [showBankDropdown, setShowBankDropdown] = useState(false);
+  const [resolvingAccount, setResolvingAccount] = useState(false);
+  const [banksList, setBanksList] = useState([]);
+
+  // Fetch banks from backend
+  const { isLoading: banksLoading } = useQuery({
+    queryKey: ['banks'],
+    queryFn: async () => {
+      const apiBase = import.meta.env.VITE_API_URL || '';
+      const response = await fetch(`${apiBase}/api/bank/list`);
+      if (!response.ok) throw new Error('Failed to fetch banks');
+      const data = await response.json();
+      setBanksList(data.data || []);
+      return data.data || [];
+    },
+  });
 
   // Fetch reviews
   const { data: reviews = [] } = useQuery({
@@ -39,13 +66,77 @@ export default function RunnerProfile() {
     enabled: !!user,
   });
 
+  // Fetch current KYC status
+  const { data: kycStatus, refetch: refetchKYC, isLoading: kycLoading } = useQuery({
+    queryKey: ['kyc-status', profile?.id],
+    queryFn: async () => {
+      if (!profile?.id) return null;
+      const { data } = await supabase
+        .from('kyc_requests')
+        .select('*')
+        .eq('profile_id', profile.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+      return data;
+    },
+    enabled: !!profile?.id,
+  });
+
+  // Fetch bank account
+  const { data: bankAccount, refetch: refetchBankAccount } = useQuery({
+    queryKey: ['bank-account', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return null;
+      const { data, error } = await supabase
+        .from('bank_accounts')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+      
+      if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows
+      return data;
+    },
+    enabled: !!user?.id,
+  });
+
   useEffect(() => {
     if (profile) {
       setBio(profile.bio || '');
       setAddress(profile.address || '');
-      setAvatarUrl(profile.avatar_url);
+      // profile.avatar_url may be a storage path (key) or a full URL.
+      // If it's a storage path, convert to a public URL via Supabase storage.
+      const av = profile.avatar_url;
+      if (av) {
+        if (av.startsWith('http')) {
+          setAvatarUrl(av);
+        } else {
+          try {
+            const { data } = supabase.storage.from('profiles_avatars').getPublicUrl(av);
+            setAvatarUrl(data?.publicUrl || null);
+          } catch (e) {
+            console.warn('Failed to get public url for avatar:', e?.message || e);
+            setAvatarUrl(null);
+          }
+        }
+      } else {
+        setAvatarUrl(null);
+      }
     }
   }, [profile]);
+
+  // Load bank account data when it's fetched
+  useEffect(() => {
+    if (bankAccount) {
+      setBankAccountNumber(bankAccount.account_number || '');
+      setSelectedBankCode(bankAccount.bank_code || '');
+      setSelectedBankName(bankAccount.bank_name || '');
+      setBankAccountName(bankAccount.account_name || '');
+      setBankStatus(bankAccount.status || 'pending');
+    }
+  }, [bankAccount]);
 
   // Save profile mutation
   const saveMutation = useMutation({
@@ -53,16 +144,106 @@ export default function RunnerProfile() {
       const { error } = await supabase
         .from('profiles')
         .update(data)
-        .eq('user_id', user.id);
+        .eq('id', user.id);
 
       if (error) throw error;
     },
     onSuccess: () => {
       setIsEditing(false);
-      alert('Profile updated successfully');
+      showSuccess('Profile updated successfully');
     },
     onError: (err) => {
-      alert('Error updating profile: ' + err.message);
+      showError('update-profile', err);
+    },
+  });
+
+  // Save bank account mutation
+  const saveBankMutation = useMutation({
+    mutationFn: async (data) => {
+      // Recommended approach:
+      // - If there is no existing bank account row -> insert new pending row
+      // - If existing row is pending -> update that pending row
+      // - If existing row is rejected -> keep rejected row and INSERT a new pending row (resubmission)
+      // - If existing row is approved -> disallow changes from frontend
+
+      if (!bankAccount?.id) {
+        // No existing row - insert
+        const { error } = await supabase
+          .from('bank_accounts')
+          .insert([{
+            user_id: user.id,
+            ...data,
+            status: 'pending',
+          }]);
+
+        if (error) throw error;
+      } else if (bankAccount.status === 'approved') {
+        // Protect approved rows from being modified by frontend
+        throw new Error('Approved accounts cannot be modified. Please contact support to make changes.');
+      } else if (bankAccount.status === 'rejected') {
+        // Keep the rejected record, insert a new pending row for resubmission
+        const { error } = await supabase
+          .from('bank_accounts')
+          .insert([{
+            user_id: user.id,
+            ...data,
+            status: 'pending',
+          }]);
+
+        if (error) throw error;
+      } else {
+        // Pending or other non-final status: update the existing pending row
+        const { error } = await supabase
+          .from('bank_accounts')
+          .update({
+            ...data,
+            status: 'pending',
+          })
+          .eq('id', bankAccount.id);
+
+        if (error) throw error;
+      }
+
+      await refetchBankAccount();
+    },
+    onSuccess: () => {
+      showSuccess('Bank account saved and pending admin approval');
+    },
+    onError: (err) => {
+      showError('save-bank', err);
+    },
+  });
+
+  // Resolve account name mutation
+  const resolveAccountMutation = useMutation({
+    mutationFn: async ({ account_number, bank_code }) => {
+      const apiBase = import.meta.env.VITE_API_URL || '';
+      const { data } = await supabase.auth.getSession();
+      const token = data?.session?.access_token;
+
+      const response = await fetch(`${apiBase}/api/bank/resolve-account`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: token ? `Bearer ${token}` : undefined,
+        },
+        body: JSON.stringify({ account_number, bank_code }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(error || 'Failed to resolve account');
+      }
+
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setBankAccountName(data.data.account_name);
+      setResolvingAccount(false);
+    },
+    onError: (err) => {
+      showError('resolve-account', err);
+      setResolvingAccount(false);
     },
   });
 
@@ -72,9 +253,9 @@ export default function RunnerProfile() {
       await logout();
       setShowLogoutModal(false);
       navigate('/');
-    } catch (err) {
+      } catch (err) {
       console.error('Logout error:', err);
-      alert('Failed to log out');
+      showError('logout', 'Failed to log out');
     } finally {
       setIsLoggingOut(false);
     }
@@ -87,7 +268,6 @@ export default function RunnerProfile() {
     try {
       setUploading(true);
 
-      // Upload to Supabase Storage
       const fileName = `${user.id}-${Date.now()}.jpg`;
       const { error: uploadError } = await supabase.storage
         .from('profiles_avatars')
@@ -95,17 +275,14 @@ export default function RunnerProfile() {
 
       if (uploadError) throw uploadError;
 
-      // Get public URL
       const { data } = supabase.storage
         .from('profiles_avatars')
         .getPublicUrl(fileName);
 
       setAvatarUrl(data.publicUrl);
-
-      // Update profile
       await saveMutation.mutateAsync({ avatar_url: data.publicUrl });
     } catch (err) {
-      alert('Failed to upload image: ' + err.message);
+      showError('upload-image', err);
     } finally {
       setUploading(false);
     }
@@ -120,7 +297,110 @@ export default function RunnerProfile() {
     }
   };
 
+  const handleSaveBankAccount = async () => {
+    if (!bankAccountNumber.trim() || !selectedBankCode || !bankAccountName.trim()) {
+      showError('validation', 'Please fill in all bank account fields');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await saveBankMutation.mutateAsync({
+        account_number: bankAccountNumber,
+        bank_code: selectedBankCode,
+        bank_name: selectedBankName,
+        account_name: bankAccountName,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Handle account number change and auto-resolve
+  const handleAccountNumberChange = async (value) => {
+    setBankAccountNumber(value);
+
+    // Trigger auto-resolve if we have 10 digits and a bank selected
+    if (value.length === 10 && /^\d{10}$/.test(value) && selectedBankCode) {
+      setResolvingAccount(true);
+      resolveAccountMutation.mutate({
+        account_number: value,
+        bank_code: selectedBankCode,
+      });
+    }
+  };
+
+  // Handle bank selection
+  const handleSelectBank = (bankCode, bankName) => {
+    setSelectedBankCode(bankCode);
+    setSelectedBankName(bankName);
+    setShowBankDropdown(false);
+    setBankSearchQuery('');
+
+    // If account number already exists, try to resolve again
+    if (bankAccountNumber.length === 10 && /^\d{10}$/.test(bankAccountNumber)) {
+      setResolvingAccount(true);
+      resolveAccountMutation.mutate({
+        account_number: bankAccountNumber,
+        bank_code: bankCode,
+      });
+    }
+  };
+
+  // Filter banks based on search query
+  const filteredBanks = banksList.filter(bank =>
+    bank.name.toLowerCase().includes(bankSearchQuery.toLowerCase()) ||
+    bank.code.includes(bankSearchQuery)
+  );
+
   const avgRating = profile?.average_rating || 0;
+
+  // Bank status helpers
+  const getBankStatusColor = () => {
+    if (bankStatus === 'approved') return '#22c55e';
+    if (bankStatus === 'rejected') return Colors.error;
+    return Colors.warning;
+  };
+
+  const getBankStatusIcon = () => {
+    if (bankStatus === 'approved') return <FiCheckCircle size={16} color="#22c55e" />;
+    if (bankStatus === 'rejected') return <FiAlertCircle size={16} color={Colors.error} />;
+    return <FiClock size={16} color={Colors.warning} />;
+  };
+
+  const getBankStatusText = () => {
+    if (bankStatus === 'approved') return 'Approved';
+    if (bankStatus === 'rejected') return 'Rejected';
+    return 'Pending approval';
+  };
+
+  // KYC helpers
+  const getKYCColor = () => {
+    if (!kycStatus) return Colors.warning;
+    if (kycStatus.status === 'approved') return '#22c55e';
+    if (kycStatus.status === 'rejected') return Colors.error;
+    if (kycStatus.status === 'pending') return Colors.warning;
+    return Colors.muted;
+  };
+
+  const getKYCIcon = () => {
+    if (!kycStatus) return <FiAlertCircle size={20} color={Colors.warning} />;
+    if (kycStatus.status === 'approved') return <FiCheckCircle size={20} color="#22c55e" />;
+    if (kycStatus.status === 'rejected') return <FiAlertCircle size={20} color={Colors.error} />;
+    if (kycStatus.status === 'pending') return <FiClock size={20} color={Colors.warning} />;
+    return <FiAlertCircle size={20} color={Colors.muted} />;
+  };
+
+  const getKYCStatusText = () => {
+    if (!kycStatus) return 'Not verified - Start verification to unlock withdrawals';
+    if (kycStatus.status === 'approved') return 'KYC Verified ✓ - You can withdraw earnings';
+    if (kycStatus.status === 'rejected') return 'KYC Rejected - Please resubmit';
+    if (kycStatus.status === 'pending') return 'Verification In Progress - Check back soon';
+    return 'Unknown status';
+  };
+
+  // Simple flag for approved KYC to control UI
+  const kycApproved = kycStatus?.status === 'approved';
 
   return (
     <div style={{ maxWidth: '600px', margin: '0 auto', padding: '20px' }}>
@@ -204,10 +484,29 @@ export default function RunnerProfile() {
             <img
               src={avatarUrl}
               alt="Profile"
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              style={{ position: 'relative', width: '100%', height: '100%', objectFit: 'cover', display: 'block', zIndex: 2 }}
             />
           ) : (
-            <FiUser size={48} color={Colors.primary} />
+            <FiUser size={48} color={Colors.primary} style={{ position: 'relative', zIndex: 1 }} />
+          )}
+          {kycApproved && (
+            <div style={{
+              position: 'absolute',
+              bottom: 6,
+              right: 6,
+              width: 28,
+              height: 28,
+              borderRadius: '50%',
+              backgroundColor: '#22c55e',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 4px 10px rgba(0,0,0,0.15)',
+              zIndex: 5,
+              pointerEvents: 'none'
+            }}>
+              <FiCheckCircle size={16} color="#fff" />
+            </div>
           )}
         </div>
 
@@ -350,6 +649,437 @@ export default function RunnerProfile() {
         )}
       </ThemedCard>
 
+      {/* ✨ Bank Account Card - NEW */}
+      <ThemedCard
+        style={{
+          marginBottom: '20px',
+          borderLeft: `4px solid ${getBankStatusColor()}`,
+          backgroundColor:
+            bankStatus === 'approved'
+              ? '#22c55e20'
+              : bankStatus === 'rejected'
+              ? Colors.error + '20'
+              : Colors.warning + '20',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+          {getBankStatusIcon()}
+          <ThemedText
+            title
+            style={{ fontSize: '16px', fontWeight: '600', display: 'block', color: getBankStatusColor() }}
+          >
+            Bank Account
+          </ThemedText>
+        </div>
+
+        {isEditing ? (
+          <>
+            {bankStatus === 'approved' ? (
+              <>
+                <div
+                  style={{
+                    backgroundColor: '#22c55e20',
+                    border: `1px solid #22c55e`,
+                    borderRadius: '6px',
+                    padding: '16px',
+                    marginBottom: '16px',
+                    display: 'flex',
+                    gap: '12px',
+                    alignItems: 'flex-start',
+                  }}
+                >
+                  <FiCheckCircle size={20} color="#22c55e" style={{ marginTop: '2px', flexShrink: 0 }} />
+                  <div>
+                    <ThemedText
+                      style={{
+                        fontSize: '14px',
+                        color: '#22c55e',
+                        fontWeight: '600',
+                        marginBottom: '8px',
+                        display: 'block',
+                      }}
+                    >
+                      Bank Account Verified
+                    </ThemedText>
+                    <ThemedText
+                      style={{
+                        fontSize: '13px',
+                        color: '#22c55e',
+                        lineHeight: '1.5',
+                        display: 'block',
+                        marginBottom: '12px',
+                      }}
+                    >
+                      Your bank account has been approved and verified. To make changes to your bank account details, please contact our customer support team.
+                    </ThemedText>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => window.open('mailto:support@errandly.com', '_blank')}
+                      style={{ width: 'fit-content', backgroundColor: '#22c55e' }}
+                    >
+                      Contact Support
+                    </Button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Warning Banner */}
+                <div
+                  style={{
+                    backgroundColor: Colors.warning + '20',
+                    border: `1px solid ${Colors.warning}`,
+                    borderRadius: '6px',
+                    padding: '12px',
+                    marginBottom: '16px',
+                    display: 'flex',
+                    gap: '8px',
+                    alignItems: 'flex-start',
+                  }}
+                >
+                  <FiAlertCircle size={18} color={Colors.warning} style={{ marginTop: '2px', flexShrink: 0 }} />
+                  <ThemedText
+                    style={{
+                      fontSize: '12px',
+                      color: Colors.warning,
+                      fontWeight: '500',
+                      lineHeight: '1.4',
+                    }}
+                  >
+                    ⚠️ <strong>IMPORTANT:</strong> Your bank account name MUST match your profile name ({profile?.first_name} {profile?.last_name}). 
+                    Account name will auto-fill after you enter your account number.
+                  </ThemedText>
+                </div>
+
+            {/* Bank Selection Dropdown */}
+            <div style={{ marginBottom: '16px', position: 'relative' }}>
+              <ThemedText
+                style={{
+                  fontSize: '12px',
+                  opacity: 0.6,
+                  marginBottom: '6px',
+                  display: 'block',
+                  fontWeight: '500',
+                }}
+              >
+                Select Bank
+              </ThemedText>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="text"
+                  placeholder="Search bank by name or code..."
+                  value={bankSearchQuery || selectedBankName}
+                  onChange={(e) => {
+                    setBankSearchQuery(e.target.value);
+                    setShowBankDropdown(true);
+                  }}
+                  onFocus={() => setShowBankDropdown(true)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: `1px solid ${Colors.border || '#ccc'}`,
+                    backgroundColor: theme.uiBackground || Colors.cardBackground,
+                    color: Colors.text,
+                    fontSize: '14px',
+                    boxSizing: 'border-box',
+                  }}
+                />
+                
+                {showBankDropdown && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      right: 0,
+                      backgroundColor: theme.uiBackground || Colors.cardBackground,
+                      border: `1px solid ${Colors.border || '#ccc'}`,
+                      borderRadius: '8px',
+                      maxHeight: '200px',
+                      overflowY: 'auto',
+                      zIndex: 10,
+                      marginTop: '4px',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                    }}
+                  >
+                    {filteredBanks.length > 0 ? (
+                      filteredBanks.map((bank) => (
+                        <div
+                          key={bank.code}
+                          onClick={() => handleSelectBank(bank.code, bank.name)}
+                          style={{
+                            padding: '12px',
+                            borderBottom: `1px solid ${Colors.border || '#eee'}`,
+                            cursor: 'pointer',
+                            backgroundColor: selectedBankCode === bank.code ? Colors.primary + '20' : 'transparent',
+                            color: Colors.text,
+                            fontSize: '14px',
+                          }}
+                        >
+                          <strong>{bank.name}</strong>
+                        </div>
+                      ))
+                    ) : (
+                      <div style={{ padding: '12px', color: Colors.muted, fontSize: '12px' }}>
+                        No banks found
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              {selectedBankName && (
+                <ThemedText style={{ fontSize: '12px', opacity: 0.6, marginTop: '4px', display: 'block' }}>
+                  Selected: {selectedBankName}
+                </ThemedText>
+              )}
+            </div>
+
+            {/* Account Number Input */}
+            <div style={{ marginBottom: '16px' }}>
+              <ThemedText
+                style={{
+                  fontSize: '12px',
+                  opacity: 0.6,
+                  marginBottom: '6px',
+                  display: 'block',
+                  fontWeight: '500',
+                }}
+              >
+                Account Number
+              </ThemedText>
+              <ThemedTextInput
+                value={bankAccountNumber}
+                onChange={(v) => handleAccountNumberChange(v)}
+                placeholder="10-digit account number"
+                maxLength="10"
+              />
+              {resolvingAccount && (
+                <ThemedText style={{ fontSize: '12px', opacity: 0.7, marginTop: '4px', display: 'block', color: Colors.primary }}>
+                  🔄 Verifying account...
+                </ThemedText>
+              )}
+            </div>
+
+            {/* Account Name (Read-only, auto-filled) */}
+            <div style={{ marginBottom: '16px' }}>
+              <ThemedText
+                style={{
+                  fontSize: '12px',
+                  opacity: 0.6,
+                  marginBottom: '6px',
+                  display: 'block',
+                  fontWeight: '500',
+                }}
+              >
+                Account Name (Auto-filled)
+              </ThemedText>
+              <input
+                type="text"
+                value={bankAccountName}
+                disabled
+                placeholder="Will auto-fill when you enter account number"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border: `1px solid ${Colors.border || '#ccc'}`,
+                  backgroundColor: Colors.background || '#f5f5f5',
+                  color: Colors.text,
+                  fontSize: '14px',
+                  boxSizing: 'border-box',
+                  opacity: 0.7,
+                }}
+              />
+              <ThemedText
+                style={{
+                  fontSize: '11px',
+                  opacity: 0.5,
+                  marginTop: '4px',
+                  display: 'block',
+                  fontStyle: 'italic',
+                }}
+              >
+                This will match your profile name: {profile?.first_name} {profile?.last_name}
+              </ThemedText>
+            </div>
+
+            <Button
+              variant="primary"
+              size="md"
+              onClick={handleSaveBankAccount}
+              disabled={saving || uploading || !selectedBankCode || !bankAccountNumber || !bankAccountName}
+              style={{ width: '100%' }}
+            >
+              {saving ? 'Saving...' : 'Save Bank Account'}
+            </Button>
+              </>
+            )}
+          </>
+        ) : bankAccount ? (
+          <>
+            <div style={{ marginBottom: '12px' }}>
+              <ThemedText style={{ fontSize: '12px', opacity: 0.6, marginBottom: '4px', display: 'block' }}>
+                Bank
+              </ThemedText>
+              <ThemedText style={{ fontSize: '14px', fontWeight: '600', display: 'block' }}>
+                {selectedBankName}
+              </ThemedText>
+            </div>
+
+            <div style={{ marginBottom: '12px' }}>
+              <ThemedText style={{ fontSize: '12px', opacity: 0.6, marginBottom: '4px', display: 'block' }}>
+                Account Name
+              </ThemedText>
+              <ThemedText style={{ fontSize: '14px', fontWeight: '600', display: 'block' }}>
+                {bankAccountName}
+              </ThemedText>
+            </div>
+
+            <div style={{ marginBottom: '12px' }}>
+              <ThemedText style={{ fontSize: '12px', opacity: 0.6, marginBottom: '4px', display: 'block' }}>
+                Account Number
+              </ThemedText>
+              <ThemedText style={{ fontSize: '14px', fontWeight: '600', display: 'block' }}>
+                {bankAccountNumber.slice(-4).padStart(bankAccountNumber.length, '•')}
+              </ThemedText>
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 12px',
+                backgroundColor: getBankStatusColor() + '15',
+                borderRadius: '6px',
+                marginTop: '12px',
+              }}
+            >
+              {getBankStatusIcon()}
+              <ThemedText
+                style={{
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  color: getBankStatusColor(),
+                }}
+              >
+                {getBankStatusText()}
+              </ThemedText>
+            </div>
+          </>
+        ) : (
+          <ThemedText style={{ fontSize: '13px', opacity: 0.7, marginBottom: '12px', display: 'block' }}>
+            No bank account added yet. Click edit to add one.
+          </ThemedText>
+        )}
+      </ThemedCard>
+
+      {/* KYC Verification Card */}
+      {!kycApproved && (
+      <ThemedCard
+        style={{
+          marginBottom: '20px',
+          borderLeft: `4px solid ${getKYCColor()}`,
+          backgroundColor:
+            kycStatus?.status === 'approved'
+              ? '#22c55e20'
+              : kycStatus?.status === 'rejected'
+              ? Colors.error + '20'
+              : kycStatus?.status === 'pending'
+              ? Colors.warning + '20'
+              : undefined,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+          {getKYCIcon()}
+          <ThemedText
+            title
+            style={{ fontSize: '16px', fontWeight: '600', display: 'block', color: getKYCColor() }}
+          >
+            KYC Verification
+          </ThemedText>
+        </div>
+
+        {kycLoading ? (
+          <ThemedText style={{ fontSize: '13px', opacity: 0.7, marginBottom: '12px', display: 'block' }}>
+            Loading verification status...
+          </ThemedText>
+        ) : !kycStatus ? (
+          <>
+            <ThemedText style={{ fontSize: '13px', opacity: 0.7, marginBottom: '12px', display: 'block' }}>
+              Verify your identity to unlock withdrawals and increase transaction limits.
+            </ThemedText>
+            <Button
+              variant="primary"
+              size="md"
+              onClick={() => setShowKYCModal(true)}
+              style={{ width: '100%' }}
+            >
+              Start KYC Verification
+            </Button>
+          </>
+        ) : (
+          <>
+            <ThemedText
+              style={{
+                fontSize: '13px',
+                opacity: 0.8,
+                marginBottom: '12px',
+                display: 'block',
+                color: getKYCColor(),
+                fontWeight: '600',
+              }}
+            >
+              {getKYCStatusText()}
+            </ThemedText>
+
+            {kycStatus.status === 'rejected' && kycStatus.reason && (
+              <ThemedText
+                style={{
+                  fontSize: '12px',
+                  color: Colors.error,
+                  marginBottom: '12px',
+                  display: 'block',
+                  padding: '8px',
+                  backgroundColor: Colors.error + '10',
+                  borderRadius: '4px',
+                }}
+              >
+                <strong>Reason:</strong> {kycStatus.reason}
+              </ThemedText>
+            )}
+
+            {kycStatus.status === 'rejected' && (
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => setShowKYCModal(true)}
+                style={{ width: '100%', marginTop: '8px' }}
+              >
+                Resubmit KYC
+              </Button>
+            )}
+
+            {kycStatus.status === 'pending' && (
+              <ThemedText
+                style={{
+                  fontSize: '12px',
+                  opacity: 0.6,
+                  marginBottom: '12px',
+                  display: 'block',
+                  fontStyle: 'italic',
+                }}
+              >
+                Our team is reviewing your documents. This usually takes 24 hours.
+              </ThemedText>
+            )}
+          </>
+        )}
+      </ThemedCard>
+      )}
+
       {/* Performance Stats */}
       {profile && (
         <div
@@ -445,7 +1175,7 @@ export default function RunnerProfile() {
               borderRadius: '8px',
               color: theme.text,
               fontFamily: 'inherit',
-                fontSize: '16px',
+              fontSize: '16px',
               minHeight: '100px',
               boxSizing: 'border-box',
               resize: 'vertical',
@@ -546,7 +1276,7 @@ export default function RunnerProfile() {
             disabled={saving || uploading}
             style={{ width: '100%' }}
           >
-            {saving ? 'Saving...' : 'Save Changes'}
+            {saving ? 'Saving...' : 'Save Profile Changes'}
           </Button>
         )}
 
@@ -632,6 +1362,14 @@ export default function RunnerProfile() {
           </ThemedCard>
         </div>
       )}
+
+      {/* KYC Modal */}
+      <KYCVerificationModal
+        isOpen={showKYCModal}
+        onClose={() => setShowKYCModal(false)}
+        profile={profile}
+        onSuccess={() => refetchKYC()}
+      />
     </div>
   );
 }

@@ -1,44 +1,34 @@
+//admin dashboard
+
 import { useState, useCallback } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Users, Package, DollarSign, AlertCircle, BarChart3, Settings, Search, Filter, MoreVertical, TrendingUp, ChevronLeft, ChevronRight, Check, X, Eye, UserCheck, UserCog, Briefcase, Activity, Wallet, ShieldAlert } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
+import { showError, showSuccess } from '../../lib/notify';
 
 export default function AdminDashboard() {
   const { Colors } = useTheme();
-  const { profile, user } = useAuth();
+  const { profile, user, profileLoading } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [resolvingDispute, setResolvingDispute] = useState(null);
   const [reviewingKYC, setReviewingKYC] = useState(null);
+  const [kycReviewReason, setKycReviewReason] = useState('');
+  const [kycAdminNotes, setKycAdminNotes] = useState('');
   const [adminNotes, setAdminNotes] = useState('');
   const [systemSettings, setSystemSettings] = useState(null);
+  const [kycFilter, setKycFilter] = useState('pending');
+  const [bankAccountFilter, setBankAccountFilter] = useState('pending');
+  const [reviewingBankAccount, setReviewingBankAccount] = useState(null);
+  const [bankAccountRejectReason, setBankAccountRejectReason] = useState('');
+  const [bankAccountAdminNotes, setBankAccountAdminNotes] = useState('');
   const apiBase = import.meta.env.VITE_API_URL || '';
 
-  // Debug logs
-  console.log('=== ADMIN DASHBOARD DEBUG ===');
-  console.log('API Base URL:', apiBase);
-  console.log('Profile:', profile);
-  console.log('User:', user);
-  console.log('Active Tab:', activeTab);
-
-  // Auth check
-  if (profile && profile.role !== 'admin') {
-    return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: Colors.background }}>
-        <div style={{ textAlign: 'center', padding: '40px', borderRadius: '12px', background: Colors.cardBackground }}>
-          <AlertCircle size={48} color={Colors.error} style={{ margin: '0 auto 16px' }} />
-          <h2 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '8px', color: Colors.text }}>Unauthorized Access</h2>
-          <p style={{ color: Colors.muted }}>You don't have permission to access the admin dashboard.</p>
-        </div>
-      </div>
-    );
-  }
-
-  // API helper with token
+  // Define all hooks BEFORE any conditional returns (required by React Hooks Rules)
   const api = useCallback(async (path, opts = {}) => {
     console.log('=== API CALL DEBUG ===');
     console.log('Path:', path);
@@ -79,6 +69,7 @@ export default function AdminDashboard() {
   const { data: statsData, isLoading: statsLoading, refetch: refetchStats } = useQuery({
     queryKey: ['adminStats'],
     queryFn: () => api('/admin/stats'),
+    staleTime: 1000 * 60 * 2, // 2 minutes
   });
 
   // Fetch data from backend with pagination
@@ -86,42 +77,57 @@ export default function AdminDashboard() {
     queryKey: ['adminUsers', currentPage, searchQuery],
     queryFn: () => api(`/admin/users?page=${currentPage}&limit=${pageSize}${searchQuery ? `&search=${searchQuery}` : ''}`),
     enabled: activeTab === 'users',
+    staleTime: 1000 * 60 * 2, // 2 minutes
   });
 
   const { data: errandsData = { errands: [], total: 0, page: 1 }, isLoading: errandsLoading, refetch: refetchErrands } = useQuery({
     queryKey: ['adminErrands', currentPage, searchQuery],
     queryFn: () => api(`/admin/errands?page=${currentPage}&limit=${pageSize}${searchQuery ? `&search=${searchQuery}` : ''}`),
     enabled: activeTab === 'errands',
+    staleTime: 1000 * 60 * 2, // 2 minutes
   });
 
   const { data: escrowsData = { escrows: [], total: 0, page: 1 }, isLoading: escrowsLoading, refetch: refetchEscrows } = useQuery({
     queryKey: ['adminEscrows', currentPage],
     queryFn: () => api(`/admin/escrows?page=${currentPage}&limit=${pageSize}`),
     enabled: activeTab === 'payments' || activeTab === 'disputes',
+    staleTime: 1000 * 60 * 2, // 2 minutes
   });
 
   const { data: auditsData = { audits: [], total: 0, page: 1 }, isLoading: auditsLoading, refetch: refetchAudits } = useQuery({
     queryKey: ['adminAudits', currentPage],
     queryFn: () => api(`/admin/audits?page=${currentPage}&limit=${pageSize}`),
     enabled: activeTab === 'analytics',
+    staleTime: 1000 * 60 * 2, // 2 minutes
   });
 
   const { data: transactionsData = { transactions: [], total: 0, page: 1 }, isLoading: transactionsLoading, refetch: refetchTransactions } = useQuery({
     queryKey: ['adminTransactions', currentPage],
     queryFn: () => api(`/admin/transactions?page=${currentPage}&limit=${pageSize}`),
     enabled: activeTab === 'transactions',
+    staleTime: 1000 * 60 * 2, // 2 minutes
   });
 
+  // ✅ UPDATED: Fetch KYC with filter
   const { data: kycData = { kyc_requests: [], total: 0, page: 1 }, isLoading: kycLoading, refetch: refetchKYC } = useQuery({
-    queryKey: ['adminKYC', currentPage],
-    queryFn: () => api(`/admin/kyc?page=${currentPage}&limit=${pageSize}&status=pending`),
+    queryKey: ['adminKYC', currentPage, kycFilter],
+    queryFn: () => api(`/admin/kyc?page=${currentPage}&limit=${pageSize}&status=${kycFilter === 'all' ? '' : kycFilter}`),
     enabled: activeTab === 'kyc',
+    staleTime: 1000 * 60 * 2, // 2 minutes
+  });
+
+  const { data: bankAccountsData = { bank_accounts: [], total: 0, page: 1 }, isLoading: bankAccountsLoading, refetch: refetchBankAccounts } = useQuery({
+    queryKey: ['adminBankAccounts', currentPage, bankAccountFilter],
+    queryFn: () => api(`/admin/bank-accounts?page=${currentPage}&limit=${pageSize}&status=${bankAccountFilter === 'all' ? '' : bankAccountFilter}`),
+    enabled: activeTab === 'bank-accounts',
+    staleTime: 1000 * 60 * 2,
   });
 
   const { data: settingsDataFromAPI, isLoading: settingsLoading, refetch: refetchSettings } = useQuery({
     queryKey: ['adminSettings'],
     queryFn: () => api('/admin/settings'),
     enabled: activeTab === 'settings',
+    staleTime: 1000 * 60 * 5, // 5 minutes - settings rarely change
     onSuccess: (data) => {
       if (data && !systemSettings) {
         setSystemSettings(data);
@@ -159,12 +165,19 @@ export default function AdminDashboard() {
     },
   });
 
+  // ✅ UPDATED: Review KYC mutation
   const reviewKYCMutation = useMutation({
     mutationFn: async ({ id, status, admin_notes, reason }) =>
       api(`/admin/kyc/${id}/review`, { method: 'POST', body: JSON.stringify({ status, admin_notes, reason }) }),
     onSuccess: () => {
       refetchKYC();
+      refetchStats();
       setReviewingKYC(null);
+      setKycReviewReason('');
+      setKycAdminNotes('');
+    },
+    onError: (err) => {
+      showError('kyc-review', err);
     },
   });
 
@@ -173,7 +186,37 @@ export default function AdminDashboard() {
       api('/admin/settings', { method: 'POST', body: JSON.stringify(settings) }),
     onSuccess: () => {
       refetchSettings();
-      alert('Settings updated successfully!');
+      showSuccess('Settings updated successfully!');
+    },
+  });
+
+  const reviewBankAccountMutation = useMutation({
+    mutationFn: async ({ id, status, rejected_reason, admin_notes }) => {
+      try {
+        const response = await api(`/admin/bank-accounts/${id}/review`, { 
+          method: 'POST', 
+          body: JSON.stringify({ status, rejected_reason, admin_notes }) 
+        });
+        
+        // api() already returns parsed data, not a Response object
+        if (response.error) {
+          throw new Error(response.error);
+        }
+        return response;
+      } catch (error) {
+        throw new Error(error.message || 'Failed to review bank account');
+      }
+    },
+    onSuccess: () => {
+      showSuccess('Bank account review submitted successfully!');
+      refetchBankAccounts();
+      refetchStats();
+      setReviewingBankAccount(null);
+      setBankAccountRejectReason('');
+      setBankAccountAdminNotes('');
+    },
+    onError: (err) => {
+      showError('bank-review', err);
     },
   });
 
@@ -193,6 +236,16 @@ export default function AdminDashboard() {
     revenue: 0,
     disputes: 0,
   };
+
+  // Fetch signed URLs for KYC documents (only when reviewing)
+  const { data: kycSignedUrlsData, isLoading: loadingSignedUrls } = useQuery({
+    queryKey: ['kycSignedUrls', reviewingKYC?.id],
+    queryFn: () => api(`/admin/kyc/${reviewingKYC.id}/signed-urls`),
+    enabled: !!reviewingKYC?.id,
+    select: (data) => data?.signed_urls,
+  });
+
+  const kycSignedUrls = kycSignedUrlsData || null;
 
   // Get data arrays
   const users = usersData.users || [];
@@ -364,7 +417,7 @@ export default function AdminDashboard() {
           <Search size={16} style={{ position: 'absolute', left: '12px', top: '12px', color: Colors.muted }} />
           <input
             type="text"
-            placeholder="Search by name or email..."
+            placeholder="Search by name, email, or user ID..."
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);
@@ -395,6 +448,7 @@ export default function AdminDashboard() {
               <thead style={{ background: Colors.cardBackground, borderBottom: `1px solid ${Colors.border}` }}>
                 <tr>
                   <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Name</th>
+                  <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>User ID</th>
                   <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Email</th>
                   <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Role</th>
                   <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Status</th>
@@ -405,6 +459,7 @@ export default function AdminDashboard() {
                 {users.map((user) => (
                   <tr key={user.id} style={{ borderBottom: `1px solid ${Colors.border}` }}>
                     <td style={{ padding: '12px', color: Colors.text, fontSize: '14px' }}>{user.full_name || 'N/A'}</td>
+                    <td style={{ padding: '12px', color: Colors.text, fontSize: '12px', fontFamily: 'monospace', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.user_id || 'N/A'}</td>
                     <td style={{ padding: '12px', color: Colors.text, fontSize: '14px' }}>{user.email || 'N/A'}</td>
                     <td style={{ padding: '12px', color: Colors.text, fontSize: '14px', textTransform: 'capitalize' }}>{user.role || 'user'}</td>
                     <td style={{ padding: '12px' }}>
@@ -806,13 +861,39 @@ export default function AdminDashboard() {
     </div>
   );
 
-  // RENDER: KYC
+  //: RENDER KYC 
   const renderKYC = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {/* Filter Tabs */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
+        {['pending', 'approved', 'rejected', 'all'].map((status) => (
+          <button
+            key={status}
+            onClick={() => {
+              setKycFilter(status);
+              setCurrentPage(1);
+            }}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '6px',
+              border: 'none',
+              background: kycFilter === status ? Colors.primary : Colors.cardBackground,
+              color: kycFilter === status ? 'white' : Colors.text,
+              cursor: 'pointer',
+              fontWeight: '600',
+              fontSize: '13px',
+              transition: 'all 0.2s',
+            }}
+          >
+            {status.charAt(0).toUpperCase() + status.slice(1)}
+          </button>
+        ))}
+      </div>
+
       {kycLoading ? (
         <p style={{ color: Colors.muted }}>Loading KYC requests...</p>
       ) : (kycData.kyc_requests || []).length === 0 ? (
-        <p style={{ color: Colors.muted }}>No pending KYC requests</p>
+        <p style={{ color: Colors.muted }}>No KYC requests found</p>
       ) : (
         <>
           <div style={{ overflowX: 'auto', borderRadius: '8px', border: `1px solid ${Colors.border}` }}>
@@ -820,7 +901,9 @@ export default function AdminDashboard() {
               <thead style={{ background: Colors.cardBackground, borderBottom: `1px solid ${Colors.border}` }}>
                 <tr>
                   <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>User</th>
+                  <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Email</th>
                   <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Document Type</th>
+                  <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Status</th>
                   <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Submitted</th>
                   <th style={{ padding: '12px', textAlign: 'center', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Actions</th>
                 </tr>
@@ -829,7 +912,21 @@ export default function AdminDashboard() {
                 {(kycData.kyc_requests || []).map((req) => (
                   <tr key={req.id} style={{ borderBottom: `1px solid ${Colors.border}` }}>
                     <td style={{ padding: '12px', color: Colors.text, fontSize: '14px' }}>{req.user_name || 'N/A'}</td>
-                    <td style={{ padding: '12px', color: Colors.text, fontSize: '14px', textTransform: 'capitalize' }}>{req.document_type || 'Unknown'}</td>
+                    <td style={{ padding: '12px', color: Colors.text, fontSize: '12px' }}>{req.runner_email || 'N/A'}</td>
+                    <td style={{ padding: '12px', color: Colors.text, fontSize: '14px', textTransform: 'capitalize' }}>{req.document_type?.replace('-', ' ') || 'Unknown'}</td>
+                    <td style={{ padding: '12px' }}>
+                      <span style={{
+                        display: 'inline-block',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        fontWeight: '600',
+                        background: getStatusColor(req.status),
+                        color: 'white',
+                      }}>
+                        {req.status}
+                      </span>
+                    </td>
                     <td style={{ padding: '12px', color: Colors.text, fontSize: '14px' }}>{new Date(req.created_at).toLocaleDateString()}</td>
                     <td style={{ padding: '12px', textAlign: 'center', display: 'flex', gap: '8px', justifyContent: 'center' }}>
                       <button
@@ -860,95 +957,264 @@ export default function AdminDashboard() {
         </>
       )}
 
-      {/* KYC Review Modal */}
+      {/* ENHANCED KYC Review Modal with Image Preview */}
       {reviewingKYC && (
         <div style={{
           position: 'fixed',
           inset: 0,
-          background: 'rgba(0,0,0,0.5)',
+          background: 'rgba(0,0,0,0.7)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           zIndex: 1000,
+          padding: '20px',
+          overflowY: 'auto',
         }}>
           <div style={{
-            background: Colors.cardBackground,
-            border: `1px solid ${Colors.border}`,
+            background: 'rgba(255, 255, 255, 0.9)',
+            border: `2px solid ${Colors.primary}`,
             borderRadius: '12px',
             padding: '24px',
-            maxWidth: '500px',
+            maxWidth: '700px',
             width: '100%',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            position: 'relative',
+            boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
           }}>
-            <h3 style={{ color: Colors.text, marginBottom: '16px', fontSize: '18px', fontWeight: '700' }}>Review KYC Document</h3>
-            <div style={{ marginBottom: '16px', padding: '16px', background: Colors.background, borderRadius: '8px' }}>
-              <p style={{ color: Colors.muted, fontSize: '12px', marginBottom: '4px' }}>Document Type</p>
-              <p style={{ color: Colors.text, fontWeight: '600', textTransform: 'capitalize' }}>{reviewingKYC.document_type}</p>
-              <p style={{ color: Colors.muted, fontSize: '12px', marginTop: '12px', marginBottom: '4px' }}>Submitted</p>
-              <p style={{ color: Colors.text, fontWeight: '600' }}>{new Date(reviewingKYC.created_at).toLocaleString()}</p>
-            </div>
-            <div style={{ marginBottom: '16px', display: 'flex', gap: '8px' }}>
-              <button
-                onClick={() => {
-                  const notes = prompt('Enter approval notes (optional):');
-                  reviewKYCMutation.mutate({ id: reviewingKYC.id, status: 'approved', admin_notes: notes || '' });
-                }}
-                style={{
-                  flex: 1,
-                  padding: '8px 12px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  background: Colors.success,
-                  color: 'white',
-                  cursor: 'pointer',
-                  fontWeight: '600',
-                  fontSize: '14px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '4px',
-                }}
-              >
-                <Check size={14} /> Approve
-              </button>
-              <button
-                onClick={() => {
-                  const reason = prompt('Enter rejection reason:');
-                  if (reason) reviewKYCMutation.mutate({ id: reviewingKYC.id, status: 'rejected', reason });
-                }}
-                style={{
-                  flex: 1,
-                  padding: '8px 12px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  background: Colors.error,
-                  color: 'white',
-                  cursor: 'pointer',
-                  fontWeight: '600',
-                  fontSize: '14px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '4px',
-                }}
-              >
-                <X size={14} /> Reject
-              </button>
-            </div>
             <button
-              onClick={() => setReviewingKYC(null)}
+              onClick={() => {
+                setReviewingKYC(null);
+                setKycReviewReason('');
+                setKycAdminNotes('');
+              }}
               style={{
-                width: '100%',
-                padding: '8px',
-                borderRadius: '6px',
-                border: `1px solid ${Colors.border}`,
+                position: 'absolute',
+                top: '16px',
+                right: '16px',
                 background: 'transparent',
-                color: Colors.text,
+                border: 'none',
+                fontSize: '24px',
                 cursor: 'pointer',
-                fontWeight: '600',
+                color: Colors.text,
               }}
             >
-              Close
+              ✕
             </button>
+
+            <h3 style={{ color: Colors.primary, marginBottom: '16px', fontSize: '20px', fontWeight: '700' }}>Review KYC Document</h3>
+
+            {/* User Info */}
+            <div style={{ marginBottom: '20px', padding: '16px', background: Colors.cardBackground, borderRadius: '8px', border: `1px solid ${Colors.border}` }}>
+              <div style={{ marginBottom: '12px' }}>
+                <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>USER NAME</p>
+                <p style={{ margin: '6px 0 0', color: Colors.text, fontWeight: '600' }}>{reviewingKYC.user_name || 'N/A'}</p>
+              </div>
+              <div style={{ marginBottom: '12px' }}>
+                <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>USER ID</p>
+                <p style={{ margin: '6px 0 0', color: Colors.text, fontFamily: 'monospace', fontSize: '12px' }}>{reviewingKYC.user_id || 'N/A'}</p>
+              </div>
+              <div style={{ marginBottom: '12px' }}>
+                <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>EMAIL</p>
+                <p style={{ margin: '6px 0 0', color: Colors.text, fontSize: '12px' }}>{reviewingKYC.runner_email || 'N/A'}</p>
+              </div>
+              <div style={{ marginBottom: '12px' }}>
+                <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>DOCUMENT TYPE</p>
+                <p style={{ margin: '6px 0 0', color: Colors.text, fontWeight: '600', textTransform: 'capitalize' }}>
+                  {reviewingKYC.document_type === 'nin' ? 'National ID (NIN)' : reviewingKYC.document_type === 'driver-license' ? "Driver's License" : 'International Passport'}
+                </p>
+              </div>
+              <div>
+                <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>DOCUMENT NUMBER</p>
+                <p style={{ margin: '6px 0 0', color: Colors.text, fontWeight: '600' }}>{reviewingKYC.document_number || 'N/A'}</p>
+              </div>
+            </div>
+
+            {/* Images Section */}
+            <div style={{ marginBottom: '20px' }}>
+              <p style={{ margin: '0 0 12px 0', color: Colors.primary, fontSize: '14px', fontWeight: '700' }}>ID Document & Selfie</p>
+              {loadingSignedUrls ? (
+                <p style={{ color: Colors.muted, textAlign: 'center', padding: '40px 20px' }}>Loading images...</p>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  {/* Document Image */}
+                  {kycSignedUrls?.document_url || reviewingKYC.document_url ? (
+                    <div>
+                      <p style={{ margin: '0 0 8px 0', color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>ID Document</p>
+                      <img
+                        src={kycSignedUrls?.document_url || reviewingKYC.document_url}
+                        alt="ID Document"
+                        style={{
+                          width: '100%',
+                          borderRadius: '8px',
+                          border: `1px solid ${Colors.border}`,
+                          maxHeight: '300px',
+                          objectFit: 'cover',
+                          cursor: 'pointer',
+                        }}
+                        onClick={() => kycSignedUrls?.document_url && window.open(kycSignedUrls.document_url, '_blank')}
+                      />
+                    </div>
+                  ) : (
+                    <div style={{ padding: '40px 20px', background: Colors.cardBackground, borderRadius: '8px', textAlign: 'center', border: `1px solid ${Colors.border}` }}>
+                      <p style={{ margin: 0, color: Colors.muted, fontSize: '12px' }}>No document image</p>
+                    </div>
+                  )}
+
+                  {/* Selfie Image */}
+                  {kycSignedUrls?.selfie_url || reviewingKYC.selfie_url ? (
+                    <div>
+                      <p style={{ margin: '0 0 8px 0', color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>Selfie with ID</p>
+                      <img
+                        src={kycSignedUrls?.selfie_url || reviewingKYC.selfie_url}
+                        alt="Selfie"
+                        style={{
+                          width: '100%',
+                          borderRadius: '8px',
+                          border: `1px solid ${Colors.border}`,
+                          maxHeight: '300px',
+                          objectFit: 'cover',
+                          cursor: 'pointer',
+                        }}
+                        onClick={() => kycSignedUrls?.selfie_url && window.open(kycSignedUrls.selfie_url, '_blank')}
+                      />
+                    </div>
+                  ) : (
+                    <div style={{ padding: '40px 20px', background: Colors.cardBackground, borderRadius: '8px', textAlign: 'center', border: `1px solid ${Colors.border}` }}>
+                      <p style={{ margin: 0, color: Colors.muted, fontSize: '12px' }}>No selfie image</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Admin Notes */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', color: Colors.text, fontSize: '12px', fontWeight: '600', marginBottom: '8px' }}>Admin Notes (Optional)</label>
+              <textarea
+                value={kycAdminNotes}
+                onChange={(e) => setKycAdminNotes(e.target.value)}
+                placeholder="Add notes about this review..."
+                style={{
+                  width: '100%',
+                  minHeight: '70px',
+                  padding: '10px',
+                  borderRadius: '8px',
+                  border: `1px solid ${Colors.border}`,
+                  background: Colors.background,
+                  color: Colors.text,
+                  fontSize: '14px',
+                  fontFamily: 'inherit',
+                }}
+              />
+            </div>
+
+            {/* Rejection Reason (if rejecting) */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', color: Colors.text, fontSize: '12px', fontWeight: '600', marginBottom: '8px' }}>Rejection Reason (If Rejecting)</label>
+              <input
+                type="text"
+                value={kycReviewReason}
+                onChange={(e) => setKycReviewReason(e.target.value)}
+                placeholder="e.g., Document unclear, Face not visible, Selfie missing"
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  borderRadius: '8px',
+                  border: `1px solid ${Colors.border}`,
+                  background: Colors.background,
+                  color: Colors.text,
+                  fontSize: '14px',
+                  fontFamily: 'inherit',
+                }}
+              />
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => reviewKYCMutation.mutate({
+                  id: reviewingKYC.id,
+                  status: 'approved',
+                  admin_notes: kycAdminNotes,
+                  reason: null,
+                })}
+                disabled={reviewKYCMutation.isPending}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: 'green',
+                  color: 'white',
+                  cursor: reviewKYCMutation.isPending ? 'not-allowed' : 'pointer',
+                  fontWeight: '600',
+                  fontSize: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  opacity: reviewKYCMutation.isPending ? 0.6 : 1,
+                }}
+              >
+                <Check size={16} /> {reviewKYCMutation.isPending ? 'Approving...' : 'Approve'}
+              </button>
+
+              <button
+                onClick={() => {
+                  if (!kycReviewReason) {
+                    showError('validation', 'Please provide a rejection reason');
+                    return;
+                  }
+                  reviewKYCMutation.mutate({
+                    id: reviewingKYC.id,
+                    status: 'rejected',
+                    admin_notes: kycAdminNotes,
+                    reason: kycReviewReason,
+                  });
+                }}
+                disabled={reviewKYCMutation.isPending || !kycReviewReason}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: 'red',
+                  color: 'white',
+                  cursor: reviewKYCMutation.isPending || !kycReviewReason ? 'not-allowed' : 'pointer',
+                  fontWeight: '600',
+                  fontSize: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  opacity: reviewKYCMutation.isPending || !kycReviewReason ? 0.6 : 1,
+                }}
+              >
+                <X size={16} /> {reviewKYCMutation.isPending ? 'Rejecting...' : 'Reject'}
+              </button>
+
+              <button
+                onClick={() => {
+                  setReviewingKYC(null);
+                  setKycReviewReason('');
+                  setKycAdminNotes('');
+                }}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: `1px solid ${Colors.border}`,
+                  background: 'transparent',
+                  color: Colors.text,
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  fontSize: '14px',
+                }}
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1109,14 +1375,357 @@ export default function AdminDashboard() {
     </div>
   );
 
+  // RENDER: Bank Accounts
+  const renderBankAccounts = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {/* Filter Tabs */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
+        {['pending', 'approved', 'rejected', 'all'].map((status) => (
+          <button
+            key={status}
+            onClick={() => {
+              setBankAccountFilter(status);
+              setCurrentPage(1);
+            }}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '6px',
+              border: 'none',
+              background: bankAccountFilter === status ? Colors.primary : Colors.cardBackground,
+              color: bankAccountFilter === status ? 'white' : Colors.text,
+              cursor: 'pointer',
+              fontWeight: '600',
+              fontSize: '13px',
+              transition: 'all 0.2s',
+            }}
+          >
+            {status.charAt(0).toUpperCase() + status.slice(1)}
+          </button>
+        ))}
+      </div>
+
+      {bankAccountsLoading ? (
+        <p style={{ color: Colors.muted }}>Loading bank accounts...</p>
+      ) : (bankAccountsData.bank_accounts || []).length === 0 ? (
+        <p style={{ color: Colors.muted }}>No bank accounts found</p>
+      ) : (
+        <>
+          <div style={{ overflowX: 'auto', borderRadius: '8px', border: `1px solid ${Colors.border}` }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead style={{ background: Colors.cardBackground, borderBottom: `1px solid ${Colors.border}` }}>
+                <tr>
+                  <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Runner</th>
+                  <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Email</th>
+                  <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Bank</th>
+                  <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Account Number</th>
+                  <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Account Name</th>
+                  <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Status</th>
+                  <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Submitted</th>
+                  <th style={{ padding: '12px', textAlign: 'center', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(bankAccountsData.bank_accounts || []).map((account) => (
+                  <tr key={account.id} style={{ borderBottom: `1px solid ${Colors.border}` }}>
+                    <td style={{ padding: '12px', color: Colors.text, fontSize: '14px' }}>{account.runner_name || 'N/A'}</td>
+                    <td style={{ padding: '12px', color: Colors.text, fontSize: '12px' }}>{account.runner_email || 'N/A'}</td>
+                    <td style={{ padding: '12px', color: Colors.text, fontSize: '14px', textTransform: 'capitalize' }}>{account.bank_name || 'N/A'}</td>
+                    <td style={{ padding: '12px', color: Colors.text, fontSize: '14px', fontFamily: 'monospace' }}>{account.account_number || 'N/A'}</td>
+                    <td style={{ padding: '12px', color: Colors.text, fontSize: '14px' }}>{account.account_name || 'N/A'}</td>
+                    <td style={{ padding: '12px' }}>
+                      <span style={{
+                        display: 'inline-block',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        fontWeight: '600',
+                        background: getStatusColor(account.status),
+                        color: 'white',
+                      }}>
+                        {account.status}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px', color: Colors.text, fontSize: '14px' }}>{new Date(account.created_at).toLocaleDateString()}</td>
+                    <td style={{ padding: '12px', textAlign: 'center', display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                      <button
+                        onClick={() => setReviewingBankAccount(account)}
+                        style={{
+                          background: Colors.primary,
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          padding: '6px 12px',
+                          cursor: 'pointer',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                        }}
+                      >
+                        <Eye size={14} /> Review
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Pagination />
+        </>
+      )}
+
+      {/* Bank Account Review Modal */}
+      {reviewingBankAccount && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px',
+          overflowY: 'auto',
+        }}>
+          <div style={{
+            background: Colors.cardBackground,
+            border: `2px solid ${Colors.primary}`,
+            borderRadius: '12px',
+            padding: '24px',
+            maxWidth: '500px',
+            width: '100%',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            position: 'relative',
+            boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+          }}>
+            <button
+              onClick={() => {
+                setReviewingBankAccount(null);
+                setBankAccountRejectReason('');
+                setBankAccountAdminNotes('');
+              }}
+              style={{
+                position: 'absolute',
+                top: '16px',
+                right: '16px',
+                background: 'transparent',
+                border: 'none',
+                fontSize: '24px',
+                cursor: 'pointer',
+                color: Colors.text,
+              }}
+            >
+              ✕
+            </button>
+
+            <h3 style={{ color: Colors.primary, marginBottom: '16px', fontSize: '20px', fontWeight: '700' }}>Review Bank Account</h3>
+
+            {/* Account Info */}
+            <div style={{ marginBottom: '20px', padding: '16px', background: Colors.background, borderRadius: '8px', border: `1px solid ${Colors.border}` }}>
+              <div style={{ marginBottom: '12px' }}>
+                <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>RUNNER NAME</p>
+                <p style={{ margin: '6px 0 0', color: Colors.text, fontWeight: '600' }}>{reviewingBankAccount.runner_name || 'N/A'}</p>
+              </div>
+              <div style={{ marginBottom: '12px' }}>
+                <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>EMAIL</p>
+                <p style={{ margin: '6px 0 0', color: Colors.text, fontSize: '12px' }}>{reviewingBankAccount.runner_email || 'N/A'}</p>
+              </div>
+              <div style={{ marginBottom: '12px' }}>
+                <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>BANK NAME</p>
+                <p style={{ margin: '6px 0 0', color: Colors.text, fontWeight: '600', textTransform: 'capitalize' }}>
+                  {reviewingBankAccount.bank_name || 'N/A'}
+                </p>
+              </div>
+              <div style={{ marginBottom: '12px' }}>
+                <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>ACCOUNT NUMBER</p>
+                <p style={{ margin: '6px 0 0', color: Colors.text, fontWeight: '600', fontFamily: 'monospace' }}>
+                  {reviewingBankAccount.account_number || 'N/A'}
+                </p>
+              </div>
+              <div>
+                <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>ACCOUNT NAME</p>
+                <p style={{ margin: '6px 0 0', color: Colors.text, fontWeight: '600' }}>{reviewingBankAccount.account_name || 'N/A'}</p>
+              </div>
+            </div>
+
+            {/* Admin Notes */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', color: Colors.text, fontSize: '12px', fontWeight: '600', marginBottom: '8px' }}>Admin Notes (Optional)</label>
+              <textarea
+                value={bankAccountAdminNotes}
+                onChange={(e) => setBankAccountAdminNotes(e.target.value)}
+                placeholder="Add notes about this review..."
+                style={{
+                  width: '100%',
+                  minHeight: '70px',
+                  padding: '10px',
+                  borderRadius: '8px',
+                  border: `1px solid ${Colors.border}`,
+                  background: Colors.background,
+                  color: Colors.text,
+                  fontSize: '14px',
+                  fontFamily: 'inherit',
+                }}
+              />
+            </div>
+
+            {/* Rejection Reason (if rejecting) */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', color: Colors.text, fontSize: '12px', fontWeight: '600', marginBottom: '8px' }}>Rejection Reason (If Rejecting)</label>
+              <input
+                type="text"
+                value={bankAccountRejectReason}
+                onChange={(e) => setBankAccountRejectReason(e.target.value)}
+                placeholder="e.g., Invalid account number, Account name mismatch"
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  borderRadius: '8px',
+                  border: `1px solid ${Colors.border}`,
+                  background: Colors.background,
+                  color: Colors.text,
+                  fontSize: '14px',
+                  fontFamily: 'inherit',
+                }}
+              />
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => reviewBankAccountMutation.mutate({
+                  id: reviewingBankAccount.id,
+                  status: 'approved',
+                  admin_notes: bankAccountAdminNotes,
+                  rejected_reason: null,
+                })}
+                disabled={reviewBankAccountMutation.isPending}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: 'green',
+                  color: 'white',
+                  cursor: reviewBankAccountMutation.isPending ? 'not-allowed' : 'pointer',
+                  fontWeight: '600',
+                  fontSize: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  opacity: reviewBankAccountMutation.isPending ? 0.6 : 1,
+                }}
+              >
+                <Check size={16} /> {reviewBankAccountMutation.isPending ? 'Approving...' : 'Approve'}
+              </button>
+
+              <button
+                onClick={() => {
+                  if (!bankAccountRejectReason) {
+                    showError('validation', 'Please provide a rejection reason');
+                    return;
+                  }
+                  reviewBankAccountMutation.mutate({
+                    id: reviewingBankAccount.id,
+                    status: 'rejected',
+                    admin_notes: bankAccountAdminNotes,
+                    rejected_reason: bankAccountRejectReason,
+                  });
+                }}
+                disabled={reviewBankAccountMutation.isPending || !bankAccountRejectReason}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: 'red',
+                  color: 'white',
+                  cursor: reviewBankAccountMutation.isPending || !bankAccountRejectReason ? 'not-allowed' : 'pointer',
+                  fontWeight: '600',
+                  fontSize: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  opacity: reviewBankAccountMutation.isPending || !bankAccountRejectReason ? 0.6 : 1,
+                }}
+              >
+                <X size={16} /> {reviewBankAccountMutation.isPending ? 'Rejecting...' : 'Reject'}
+              </button>
+
+              <button
+                onClick={() => {
+                  setReviewingBankAccount(null);
+                  setBankAccountRejectReason('');
+                  setBankAccountAdminNotes('');
+                }}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: `1px solid ${Colors.border}`,
+                  background: 'transparent',
+                  color: Colors.text,
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  fontSize: '14px',
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   // Main render
+  // ✅ Auth checks AFTER all hooks (required by React Hooks Rules)
+  if (!user) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: Colors.background }}>
+        <div style={{ textAlign: 'center', padding: '40px', borderRadius: '12px', background: Colors.cardBackground }}>
+          <AlertCircle size={48} color={Colors.error} style={{ margin: '0 auto 16px' }} />
+          <h2 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '8px', color: Colors.text }}>Authentication Required</h2>
+          <p style={{ color: Colors.muted }}>You must be logged in to access the admin dashboard.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (profileLoading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: Colors.background }}>
+        <div style={{ textAlign: 'center', padding: '40px' }}>
+          <div style={{ fontSize: '16px', color: Colors.text }}>Loading...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!profile || profile.role !== 'admin') {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: Colors.background }}>
+        <div style={{ textAlign: 'center', padding: '40px', borderRadius: '12px', background: Colors.cardBackground }}>
+          <AlertCircle size={48} color={Colors.error} style={{ margin: '0 auto 16px' }} />
+          <h2 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '8px', color: Colors.text }}>Unauthorized Access</h2>
+          <p style={{ color: Colors.muted }}>You don't have permission to access the admin dashboard.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ minHeight: '100vh', background: Colors.background, padding: '24px' }}>
       <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
         {/* Header */}
         <div style={{ marginBottom: '32px' }}>
           <h1 style={{ fontSize: '32px', fontWeight: '700', color: Colors.text, marginBottom: '8px' }}>Admin Dashboard</h1>
-          <p style={{ color: Colors.muted, fontSize: '14px' }}>Manage users, errands, payments, and system settings</p>
+          <p style={{ color: Colors.muted, fontSize: '14px' }}>Manage users, errands, payments, KYC, and system settings</p>
         </div>
 
         {/* Tabs */}
@@ -1128,7 +1737,7 @@ export default function AdminDashboard() {
           overflowX: 'auto',
           paddingBottom: '16px',
         }}>
-          {['dashboard', 'users', 'errands', 'payments', 'disputes', 'transactions', 'kyc', 'analytics', 'settings'].map((tab) => (
+          {['dashboard', 'users', 'errands', 'payments', 'disputes', 'transactions', 'kyc', 'bank-accounts', 'analytics', 'settings'].map((tab) => (
             <button
               key={tab}
               onClick={() => {
@@ -1162,6 +1771,7 @@ export default function AdminDashboard() {
         {activeTab === 'disputes' && renderDisputes()}
         {activeTab === 'transactions' && renderTransactions()}
         {activeTab === 'kyc' && renderKYC()}
+        {activeTab === 'bank-accounts' && renderBankAccounts()}
         {activeTab === 'analytics' && renderAuditLogs()}
         {activeTab === 'settings' && renderSettings()}
       </div>

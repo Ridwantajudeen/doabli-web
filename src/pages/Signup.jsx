@@ -5,6 +5,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import Button from '../components/Button';
 import { ThemedView, ThemedCard, ThemedText, ThemedTextInput } from '../components/ThemedComponents';
+import { friendlyMessage } from '../lib/notify';
 
 const roles = [
   { label: 'Client', value: 'client', description: 'I need errands done' },
@@ -104,7 +105,7 @@ export default function Signup() {
       });
 
       if (error) {
-        setServerMessage(error || 'Signup failed. Try again.');
+        setServerMessage(friendlyMessage('signup', error));
         console.error('Signup error:', error);
       } else if (!user) {
         setServerMessage('Signup failed. Please try again.');
@@ -128,7 +129,7 @@ export default function Signup() {
       }
     } catch (err) {
       console.error('Signup exception:', err);
-      setServerMessage(err.message || 'Signup failed. Try again.');
+      setServerMessage(friendlyMessage('signup', err));
     } finally {
       setLoading(false);
     }

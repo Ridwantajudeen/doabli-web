@@ -18,16 +18,61 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
 
-  // ------------------------------
-  // Restore session + auto-refresh
-  // ------------------------------
+  // ✅ Load profile with timeout and auto-create if missing
+  const loadProfileAsync = async (userId) => {
+    if (!userId) return null;
+
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Profile load timeout")), 5000)
+    );
+
+    try {
+      const { profile: fetched, error } = await Promise.race([
+        getProfile(userId),
+        timeoutPromise,
+      ]);
+
+      if (error) {
+        console.error("Error fetching profile:", error);
+        return null;
+      }
+
+      if (!fetched) {
+        // ✅ Auto-create profile if it doesn't exist
+        const { profile: newProfile, error: createError } = await createProfile(
+          userId,
+          {
+            email: user?.email || "",
+            firstName: "",
+            lastName: "",
+            phone: "",
+            role: "runner", // default role
+          }
+        );
+        if (createError) {
+          console.error("Error creating profile:", createError);
+          return null;
+        }
+        setProfile(newProfile);
+        return newProfile;
+      }
+
+      setProfile(fetched);
+      return fetched;
+    } catch (err) {
+      console.error("Profile load error:", err);
+      return null;
+    }
+  };
+
+  // ✅ Init session and listen to auth changes
   useEffect(() => {
     const init = async () => {
       try {
         const { session } = await getCurrentSession();
         if (session?.user) {
           setUser(session.user);
-          loadProfile(session.user.id);
+          await loadProfileAsync(session.user.id);
         }
       } catch (err) {
         console.error("Init session error:", err);
@@ -38,15 +83,20 @@ export function AuthProvider({ children }) {
 
     init();
 
-    // Token refresh + login/logout watcher
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (session?.user) {
           setUser(session.user);
-          loadProfile(session.user.id);
+          setProfileLoading(true);
+          try {
+            await loadProfileAsync(session.user.id);
+          } finally {
+            setProfileLoading(false);
+          }
         } else {
           setUser(null);
           setProfile(null);
+          setProfileLoading(false);
         }
       }
     );
@@ -54,43 +104,39 @@ export function AuthProvider({ children }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  // ------------------------------
-  // Lazy profile loader
-  // ------------------------------
+  // Explicit profile loader (callable)
   const loadProfile = async (userId) => {
+    if (!userId) return null;
+    setProfileLoading(true);
     try {
-      setProfileLoading(true);
-      const { profile: fetched, error } = await getProfile(userId);
-      if (error) {
-        console.error('Error fetching profile in loadProfile:', error);
-        return null;
-      }
-      if (fetched) setProfile(fetched);
-      return fetched || null;
-    } catch (err) {
-      console.error("Profile load error:", err);
-      return null;
+      return await loadProfileAsync(userId);
     } finally {
       setProfileLoading(false);
     }
   };
 
-  // ------------------------------
   // Auth Functions
-  // ------------------------------
   const signup = async (email, password, userData) => {
     setLoading(true);
     try {
       const { user: authUser, error } = await signUpUser(email, password);
       if (error) return { error };
 
-      const { profile: newProfile } = await createProfile(authUser.id, {
-        email,
-        firstName: userData.firstName,
-        lastName: userData.lastName,
-        phone: userData.phone,
-        role: userData.role,
-      });
+      const { profile: newProfile, error: profileError } = await createProfile(
+        authUser.id,
+        {
+          email,
+          firstName: userData.firstName,
+          lastName: userData.lastName,
+          phone: userData.phone,
+          role: userData.role,
+        }
+      );
+
+      if (profileError) {
+        console.error("Error creating profile:", profileError);
+        return { error: profileError };
+      }
 
       setUser(authUser);
       setProfile(newProfile);
@@ -107,9 +153,10 @@ export function AuthProvider({ children }) {
       const { user: authUser, error } = await loginUser(email, password);
       if (error) return { error };
 
-      // load profile and wait for it so callers can use role immediately
-      const fetchedProfile = await loadProfile(authUser.id);
       setUser(authUser);
+
+      // ✅ Auto-create profile if missing
+      const fetchedProfile = await loadProfileAsync(authUser.id);
 
       return { user: authUser, profile: fetchedProfile };
     } finally {

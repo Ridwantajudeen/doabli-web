@@ -5,12 +5,16 @@ import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { ThemedView, ThemedText, ThemedCard } from '../../components/ThemedComponents';
 import Button from '../../components/Button';
+import { FiClock, FiUser, FiCheck, FiX, FiMapPin, FiCalendar, FiInbox } from 'react-icons/fi';
 
-const STATUS_CONFIG = {
-  posted: { color: '#3b82f6', label: 'Posted', icon: '⏱️' },
-  assigned: { color: '#f59e0b', label: 'Assigned', icon: '👤' },
-  completed: { color: '#22c55e', label: 'Completed', icon: '✓' },
-  canceled: { color: '#ef4444', label: 'Canceled', icon: '✕' },
+const getStatusConfig = (status) => {
+  const configs = {
+    posted: { color: '#3b82f6', label: 'Posted', icon: FiClock },
+    assigned: { color: '#f59e0b', label: 'Assigned', icon: FiUser },
+    completed: { color: '#22c55e', label: 'Completed', icon: FiCheck },
+    canceled: { color: '#ef4444', label: 'Canceled', icon: FiX },
+  };
+  return configs[status] || configs.posted;
 };
 
 export default function ClientMyErrands() {
@@ -63,7 +67,7 @@ export default function ClientMyErrands() {
         </div>
       ) : errands.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-          <div style={{ fontSize: '48px', marginBottom: '12px' }}>📭</div>
+          <div style={{ fontSize: '48px', marginBottom: '12px', display: 'flex', justifyContent: 'center' }}><FiInbox size={48} /></div>
           <ThemedText title style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '8px', display: 'block' }}>
             No Errands Yet
           </ThemedText>
@@ -80,7 +84,8 @@ export default function ClientMyErrands() {
       ) : (
         <div style={{ display: 'grid', gap: '12px' }}>
           {errands.map((errand) => {
-            const config = STATUS_CONFIG[errand.status] || STATUS_CONFIG.posted;
+            const config = getStatusConfig(errand.status);
+            const IconComponent = config.icon;
             return (
               <ThemedCard
                 key={errand.id}
@@ -112,9 +117,12 @@ export default function ClientMyErrands() {
                         fontSize: '12px',
                         fontWeight: '600',
                         whiteSpace: 'nowrap',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
                       }}
                     >
-                      {config.icon} {config.label}
+                      <IconComponent size={12} /> {config.label}
                     </div>
                   </div>
 
@@ -122,9 +130,9 @@ export default function ClientMyErrands() {
                     {errand.description}
                   </ThemedText>
 
-                  <div style={{ display: 'flex', gap: '16px', fontSize: '13px' }}>
-                    <span>📍 {errand.location}</span>
-                    <span>📅 {new Date(errand.created_at).toLocaleDateString()}</span>
+                  <div style={{ display: 'flex', gap: '16px', fontSize: '13px', alignItems: 'center' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><FiMapPin size={13} /> {errand.location}</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><FiCalendar size={13} /> {new Date(errand.created_at).toLocaleDateString()}</span>
                   </div>
                 </div>
 

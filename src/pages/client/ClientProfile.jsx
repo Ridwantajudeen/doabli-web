@@ -3,6 +3,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { useMutation } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
+import { showError, showSuccess } from '../../lib/notify';
 import { ThemedText, ThemedCard, ThemedTextInput } from '../../components/ThemedComponents';
 import Button from '../../components/Button';
 import { useNavigate } from 'react-router-dom';
@@ -35,16 +36,16 @@ export default function ClientProfile() {
       const { error } = await supabase
         .from('profiles')
         .update(data)
-        .eq('user_id', user.id);
+        .eq('id', user.id);
 
       if (error) throw error;
     },
     onSuccess: () => {
       setIsEditing(false);
-      alert('Profile updated successfully');
+      showSuccess('Profile updated successfully');
     },
     onError: (err) => {
-      alert('Error updating profile: ' + err.message);
+      showError('update-profile', err);
     },
   });
 
@@ -56,7 +57,7 @@ export default function ClientProfile() {
       navigate('/');
     } catch (err) {
       console.error('Logout error:', err);
-      alert('Failed to log out');
+      showError('logout', 'Failed to log out');
     } finally {
       setIsLoggingOut(false);
     }
@@ -83,7 +84,7 @@ export default function ClientProfile() {
       setAvatarUrl(data.publicUrl);
       await saveMutation.mutateAsync({ avatar_url: data.publicUrl });
     } catch (err) {
-      alert('Failed to upload image: ' + err.message);
+      showError('upload-image', err);
     } finally {
       setUploading(false);
     }

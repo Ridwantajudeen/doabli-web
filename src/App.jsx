@@ -26,7 +26,16 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
 import Footer from './components/Footer';
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes - data stays fresh for 5 mins
+      gcTime: 1000 * 60 * 10, // 10 minutes - cache keeps data for 10 mins
+      retry: 1, // Only retry once on failure
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
+    },
+  },
+});
 
 function App() {
   return (
