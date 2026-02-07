@@ -22,15 +22,15 @@ export function AuthProvider({ children }) {
   const loadProfileAsync = async (userId) => {
     if (!userId) return null;
 
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("Profile load timeout")), 5000)
+    // Use a non-throwing timeout so we don't reject the race and cause an exception.
+    // If fetching takes too long, the timeout will resolve with a null profile result.
+    const timeoutMs = 10000; // increase timeout to 10s for slow networks
+    const timeoutPromise = new Promise((resolve) =>
+      setTimeout(() => resolve({ profile: null, error: 'timeout' }), timeoutMs)
     );
 
     try {
-      const { profile: fetched, error } = await Promise.race([
-        getProfile(userId),
-        timeoutPromise,
-      ]);
+      const { profile: fetched, error } = await Promise.race([getProfile(userId), timeoutPromise]);
 
       if (error) {
         console.error("Error fetching profile:", error);

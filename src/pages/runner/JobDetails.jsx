@@ -103,32 +103,39 @@ export default function JobDetails() {
         .from('runner_applications')
         .select('*')
         .eq('errand_id', id)
-        .eq('runner_id', user?.id)
+        .eq('runner_id', profile?.id)
         .single();
 
       return data;
     },
-    enabled: !!id && !!user,
+    enabled: !!id && !!profile,
   });
 
   // Apply for job
   const applyMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
-        .from('runner_applications')
-        .insert([
-          {
-            errand_id: id,
-            runner_id: user.id,
-            status: 'pending',
-          },
-        ]);
+      const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      
+      const res = await fetch(`${apiBase}/api/errands/apply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          errand_id: id,
+          runner_id: profile.id,
+        }),
+      });
 
-      if (error) throw error;
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to apply');
+      }
+
+      return await res.json();
     },
     onSuccess: () => {
       showSuccess('Application sent!');
-      queryClient.invalidateQueries({ queryKey: ['my-application', id, user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['my-application', id, profile?.id] });
+      queryClient.invalidateQueries({ queryKey: ['runner-applications'] });
     },
     onError: (err) => {
       showError('send-message', err);
@@ -177,6 +184,8 @@ export default function JobDetails() {
       setCompletionImage(null);
       setShowMarkDoneModal(false);
       queryClient.invalidateQueries({ queryKey: ['job', id] });
+      queryClient.invalidateQueries({ queryKey: ['escrow', job?.escrow_id] });
+      queryClient.invalidateQueries({ queryKey: ['runner-applications'] });
     },
     onError: (err) => {
       showError('generic', err);
@@ -188,7 +197,7 @@ export default function JobDetails() {
     mutationFn: async () => {
       const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
-      // ✅ Send only escrow_id - backend handles everything else
+      // ✅ Send profile_id and user_id for proper identification
       const res = await fetch(`${apiBase}/api/pay/withdrawals`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -233,13 +242,15 @@ export default function JobDetails() {
   const calculateWithdrawalDetails = () => {
     if (!escrow) return null;
 
-    const amount = Number(escrow.runner_earnings) || 0;
-    const fee = (amount * 5) / 100;
-    const netAmount = amount - fee;
+    // ✅ FIX: Use the platform_fee already calculated by backend
+    // runner_earnings is already NET (fee already deducted)
+    const netAmount = Number(escrow.runner_earnings) || 0;
+    const platformFee = Number(escrow.platform_fee) || 0;
+    const grossAmount = netAmount + platformFee;  // Reconstruct gross for display
 
     return {
-      grossAmount: amount,
-      fee,
+      grossAmount,
+      fee: platformFee,  // ✅ Use the fee from escrow, don't recalculate
       netAmount,
     };
   };
@@ -415,8 +426,68 @@ export default function JobDetails() {
             Job Status
           </ThemedText>
 
+          {/* Dispute Resolved in Runner's Favor - Payment Released */}
+          {escrow.status === 'released' && escrow.dispute_resolved_at && (
+            <div style={{ padding: '12px', backgroundColor: '#22c55e20', borderRadius: '8px', marginBottom: '12px' }}>
+              <ThemedText style={{ color: '#22c55e', fontWeight: '600', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <FiCheck size={16} /> Dispute Resolved in Your Favor
+              </ThemedText>
+              <ThemedText style={{ fontSize: '13px', opacity: 0.7, marginBottom: '8px', display: 'block' }}>
+                Your dispute has been reviewed and you have been approved by admin. Your payment has been released to your account.
+              </ThemedText>
+              {withdrawalDetails && (
+                <div style={{ marginTop: '12px', padding: '12px', backgroundColor: 'rgba(255,255,255,0.5)', borderRadius: '6px' }}>
+                  <ThemedText style={{ fontSize: '13px', marginBottom: '6px', display: 'block' }}>
+                    Earnings breakdown:
+                  </ThemedText>
+                  <div style={{ fontSize: '12px', opacity: 0.8, display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span>Gross amount:</span>
+                    <span>₦{withdrawalDetails.grossAmount.toLocaleString()}</span>
+                  </div>
+                  <div style={{ fontSize: '12px', opacity: 0.8, display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span>Platform fee (5%):</span>
+                    <span>₦{withdrawalDetails.fee.toLocaleString()}</span>
+                  </div>
+                  <div style={{
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    paddingTop: '8px',
+                    borderTop: '1px solid rgba(0,0,0,0.1)',
+                  }}>
+                    <span>You will receive:</span>
+                    <span>₦{withdrawalDetails.netAmount.toLocaleString()}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Dispute Resolved Against Runner */}
+          {escrow.status === 'refunded' && escrow.dispute_resolved_at && (
+            <div style={{ padding: '12px', backgroundColor: '#ef444420', borderRadius: '8px', marginBottom: '12px' }}>
+              <ThemedText style={{ color: '#ef4444', fontWeight: '600', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <FiX size={16} /> Dispute Resolved
+              </ThemedText>
+              <ThemedText style={{ fontSize: '13px', opacity: 0.7, display: 'block' }}>
+                Your dispute has been reviewed and resolved against you. The errand has been reopened for the client to find another runner.
+              </ThemedText>
+              {escrow.admin_notes && (
+                <div style={{ backgroundColor: Colors.background, padding: '12px', borderRadius: '8px', marginTop: '8px' }}>
+                  <ThemedText style={{ fontSize: '12px', fontWeight: '600', opacity: 0.7, marginBottom: '6px', display: 'block', textTransform: 'uppercase' }}>
+                    Admin Resolution Notes:
+                  </ThemedText>
+                  <ThemedText style={{ fontSize: '13px', display: 'block' }}>
+                    {escrow.admin_notes}
+                  </ThemedText>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Awaiting Client Approval */}
-          {escrow.runner_status === 'completed' && escrow.client_status === 'pending' && (
+          {escrow.runner_status === 'completed' && escrow.client_status === 'pending' && !escrow.dispute_resolved_at && (
             <div style={{ padding: '12px', backgroundColor: '#f59e0b20', borderRadius: '8px', marginBottom: '12px' }}>
               <ThemedText style={{ color: '#f59e0b', fontWeight: '600', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <FiClock size={16} /> Awaiting Client Approval
@@ -428,7 +499,7 @@ export default function JobDetails() {
           )}
 
           {/* ✅ NEW: Payment Available for Withdrawal */}
-          {(escrow.status === 'released' || escrow.status === 'releasable') && escrow.client_status === 'confirmed' && (
+          {(escrow.status === 'released' || escrow.status === 'releasable') && escrow.client_status === 'confirmed' && !escrow.dispute_resolved_at && (
             <div style={{ padding: '12px', backgroundColor: '#22c55e20', borderRadius: '8px', marginBottom: '12px' }}>
               <ThemedText style={{ color: '#22c55e', fontWeight: '600', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <FiCheck size={16} /> Payment Available for Withdrawal
@@ -478,13 +549,13 @@ export default function JobDetails() {
           )}
 
           {/* Dispute Raised */}
-          {(escrow.status === 'disputed' || escrow.client_status === 'disputed') && (
+          {(escrow.status === 'disputed' || escrow.client_status === 'disputed') && !escrow.dispute_resolved_at && (
             <div style={{ padding: '12px', backgroundColor: '#ef444420', borderRadius: '8px', marginBottom: '12px' }}>
               <ThemedText style={{ color: '#ef4444', fontWeight: '600', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <FiAlertTriangle size={16} /> Dispute Raised
               </ThemedText>
               <ThemedText style={{ fontSize: '13px', opacity: 0.7, display: 'block' }}>
-                The client has raised a dispute. Our support team will review and resolve this.
+                A dispute has been raised. Our support team will review and resolve this.
               </ThemedText>
             </div>
           )}

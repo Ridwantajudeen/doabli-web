@@ -1,5 +1,5 @@
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { showSuccess } from '../../lib/notify';
 import { useTheme } from '../../context/ThemeContext';
@@ -16,6 +16,7 @@ export default function RunnerProfile() {
   const errandId = searchParams.get('errandId');
   const { theme, Colors } = useTheme();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
 
   // Fetch runner profile
   const { data: runner, isLoading } = useQuery({
@@ -52,7 +53,8 @@ export default function RunnerProfile() {
     queryKey: ['reviews', runnerId],
     queryFn: async () => {
       const apiUrl = import.meta.env.VITE_API_URL || '';
-      const response = await fetch(`${apiUrl}/api/review/runner/${runnerId}?page=1&limit=5`);
+      // NOTE: backend mounts review routes at /review (not /api/review)
+      const response = await fetch(`${apiUrl}/review/runner/${runnerId}?page=1&limit=5`);
       if (!response.ok) throw new Error('Failed to fetch reviews');
       const data = await response.json();
       return data.reviews || [];
@@ -62,27 +64,33 @@ export default function RunnerProfile() {
   // Accept application
   const acceptMutation = useMutation({
     mutationFn: async () => {
-      // Update application
-      await supabase
-        .from('runner_applications')
-        .update({ status: 'accepted' })
-        .eq('id', applicationId);
+      const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
-      // Update errand with runner's user_id
-      await supabase
-        .from('errands')
-        .update({ assigned_to: runnerId, status: 'assigned' })
-        .eq('id', errandId);
+      const res = await fetch(`${apiBase}/api/errands/application/${applicationId}/accept`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          errand_id: errandId,
+          runner_id: runnerId,
+          client_id: user.id,
+        }),
+      });
 
-      // Update escrow with runner's profile.id (FK constraint)
-      await supabase
-        .from('escrow')
-        .update({ runner_id: runner.id })
-        .eq('errand_id', errandId);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to accept application');
+      }
+
+      return await res.json();
     },
     onSuccess: () => {
       showSuccess('Runner accepted!');
-      navigate('/client/errands');
+      queryClient.invalidateQueries({ queryKey: ['applications', errandId] });
+      queryClient.invalidateQueries({ queryKey: ['errand', errandId] });
+      queryClient.invalidateQueries({ queryKey: ['client-errands'] });
+      setTimeout(() => {
+        navigate('/client/errands');
+      }, 1000);
     },
   });
 
@@ -321,7 +329,7 @@ export default function RunnerProfile() {
       <div style={{ display: 'grid', gap: '12px' }}>
         <Button
           variant="primary"
-          onClick={() => navigate(`/client/chat/${runner.user_id}`)}
+          onClick={() => navigate(`/client/chat/${runner.id}`)}
           style={{ width: '100%' }}
         >
           Contact Runner

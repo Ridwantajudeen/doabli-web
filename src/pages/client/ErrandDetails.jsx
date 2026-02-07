@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { showError, showSuccess } from '../../lib/notify';
@@ -22,6 +22,7 @@ export default function ErrandDetails() {
   const navigate = useNavigate();
   const { theme, Colors } = useTheme();
   const { user, profile } = useAuth();
+  const queryClient = useQueryClient();
   
   // Dispute modal state
   const [showDisputeModal, setShowDisputeModal] = useState(false);
@@ -102,11 +103,11 @@ export default function ErrandDetails() {
       const { data: runnerData } = await supabase
         .from('profiles')
         .select('*')
-        .in('user_id', runnerIds);
+        .in('id', runnerIds);
 
       return data.map((app) => ({
         ...app,
-        runner: runnerData?.find((r) => r.user_id === app.runner_id),
+        runner: runnerData?.find((r) => r.id === app.runner_id),
       }));
     },
     enabled: !!errand && !errand.assigned_to,
@@ -135,8 +136,9 @@ export default function ErrandDetails() {
     },
     onSuccess: () => {
       showSuccess('Job accepted! Payment is now available for withdrawal.');
-      // Refresh the page to fetch updated escrow with runner_earnings
-      window.location.reload();
+      queryClient.invalidateQueries({ queryKey: ['errand', id] });
+      queryClient.invalidateQueries({ queryKey: ['escrow', id] });
+      queryClient.invalidateQueries({ queryKey: ['client-errands'] });
     },
     onError: (err) => {
       showError('generic', err);
@@ -183,6 +185,8 @@ export default function ErrandDetails() {
       setShowDisputeModal(false);
       setDisputeDetails('');
       setDisputeImage(null);
+      queryClient.invalidateQueries({ queryKey: ['errand', id] });
+      queryClient.invalidateQueries({ queryKey: ['escrow', id] });
     },
     onError: (err) => {
       showError('generic', err);
@@ -228,6 +232,8 @@ export default function ErrandDetails() {
       setShowDefenseModal(false);
       setDefenseDetails('');
       setDefenseImage(null);
+      queryClient.invalidateQueries({ queryKey: ['errand', id] });
+      queryClient.invalidateQueries({ queryKey: ['escrow', id] });
     },
     onError: (err) => {
       showError('generic', err);
@@ -269,6 +275,9 @@ export default function ErrandDetails() {
     onSuccess: () => {
       showSuccess('Review submitted!');
       setReviewData({ rating: 5, comment: '' });
+      queryClient.invalidateQueries({ queryKey: ['errand', id] });
+      queryClient.invalidateQueries({ queryKey: ['escrow', id] });
+      queryClient.invalidateQueries({ queryKey: ['runner', errand?.assigned_to] });
     },
     onError: (err) => {
       showError('generic', err);
@@ -479,7 +488,7 @@ export default function ErrandDetails() {
             </div>
 
             <Button
-              onClick={() => navigate(`/client/runner-profile/${runner.user_id}`)}
+              onClick={() => navigate(`/client/runner-profile/${runner.id}`)}
               variant="secondary"
               size="sm"
             >
@@ -504,7 +513,7 @@ export default function ErrandDetails() {
               <div
                 key={app.id}
                 onClick={() =>
-                  navigate(`/client/runner-profile/${app.runner?.user_id}?applicationId=${app.id}&errandId=${id}`)
+                  navigate(`/client/runner-profile/${app.runner?.id}?applicationId=${app.id}&errandId=${id}`)
                 }
                 style={{
                   padding: '12px',
@@ -567,8 +576,33 @@ export default function ErrandDetails() {
         </ThemedCard>
       )}
 
+      {/* Dispute Resolved in Client's Favor - Errand returns to posted */}
+      {errand?.status === 'posted' && escrow && escrow.status === 'refunded' && escrow.dispute_resolved_at && (
+        <ThemedCard style={{ marginBottom: '24px', backgroundColor: '#22c55e20', borderLeft: `4px solid #22c55e` }}>
+          <ThemedText
+            title
+            style={{ fontSize: '18px', fontWeight: '600', marginBottom: '12px', display: 'block', color: '#22c55e' }}
+          >
+            ✓ Dispute Resolved
+          </ThemedText>
+          <ThemedText style={{ fontSize: '14px', marginBottom: '16px', display: 'block' }}>
+            Your dispute has been reviewed and resolved in your favor. The errand has been reopened and is available for other runners to apply.
+          </ThemedText>
+          {escrow.admin_notes && (
+            <div style={{ backgroundColor: Colors.background, padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
+              <ThemedText style={{ fontSize: '12px', fontWeight: '600', opacity: 0.7, marginBottom: '6px', display: 'block', textTransform: 'uppercase' }}>
+                Admin Resolution Notes:
+              </ThemedText>
+              <ThemedText style={{ fontSize: '13px', display: 'block' }}>
+                {escrow.admin_notes}
+              </ThemedText>
+            </div>
+          )}
+        </ThemedCard>
+      )}
+
       {/* Job Completion Section - Show when runner marks job done */}
-      {escrow && escrow.runner_status === 'completed' && escrow.client_status === 'pending' && (
+      {escrow && escrow.runner_status === 'completed' && escrow.client_status === 'pending' && escrow.status !== 'refunded' && (
         <ThemedCard style={{ marginBottom: '24px', backgroundColor: Colors.primary + '10', borderLeft: `4px solid ${Colors.primary}` }}>
           <ThemedText
             title

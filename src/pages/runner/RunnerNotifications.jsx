@@ -1,11 +1,12 @@
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { ThemedText, ThemedCard } from '../../components/ThemedComponents';
 import Button from '../../components/Button';
 import { useNavigate } from 'react-router-dom';
-import { FiMessageSquare, FiClipboard, FiCheck, FiX, FiAward, FiBell } from 'react-icons/fi';
+import { FiMessageSquare, FiClipboard, FiCheck, FiX, FiAward, FiBell, FiAlertCircle } from 'react-icons/fi';
 
 const notificationIcons = {
   messages: FiMessageSquare,
@@ -13,6 +14,8 @@ const notificationIcons = {
   accepted: FiCheck,
   rejected: FiX,
   completed: FiAward,
+  dispute: FiAlertCircle,
+  dispute_resolved: FiCheck,
   default: FiBell,
 };
 
@@ -20,21 +23,71 @@ export default function RunnerNotifications() {
   const navigate = useNavigate();
   const { theme, Colors } = useTheme();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [defendingDispute, setDefendingDispute] = useState(null);
+  const [defenseDetails, setDefenseDetails] = useState('');
+  const [defenseImage, setDefenseImage] = useState(null);
+  const [defenseImageBase64, setDefenseImageBase64] = useState(null);
 
   // Fetch notifications
-  const { data: notifications = [], isLoading, refetch } = useQuery({
+  const { data: notifications = [], isLoading } = useQuery({
     queryKey: ['runner-notifications', user?.id],
     queryFn: async () => {
       const { data } = await supabase
         .from('notifications')
         .select('*')
         .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+        .order('id', { ascending: false });
 
       return data || [];
     },
     enabled: !!user,
+    staleTime: Infinity, // Prevent auto-refetch, rely on real-time subscription
   });
+
+  // Real-time subscription for new notifications
+  useEffect(() => {
+    if (!user?.id) return;
+
+    console.log('[RunnerNotifications] Setting up real-time subscription for', user.id);
+
+    const channel = supabase
+      .channel(`notifications:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          console.log('[RunnerNotifications] New notification received:', payload);
+          queryClient.invalidateQueries({ queryKey: ['runner-notifications', user.id] });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          console.log('[RunnerNotifications] Notification updated:', payload);
+          queryClient.invalidateQueries({ queryKey: ['runner-notifications', user.id] });
+        }
+      )
+      .subscribe((status) => {
+        console.log('[RunnerNotifications] Subscription status:', status);
+      });
+
+    return () => {
+      console.log('[RunnerNotifications] Cleaning up subscription');
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, queryClient]);
 
   // Mark as read
   const markAsReadMutation = useMutation({
@@ -45,9 +98,14 @@ export default function RunnerNotifications() {
         .eq('id', notificationId);
 
       if (error) throw error;
+      return notificationId;
     },
-    onSuccess: () => {
-      refetch();
+    onSuccess: (notificationId) => {
+      // Update the cache immediately
+      queryClient.setQueryData(['runner-notifications', user.id], (oldData) => {
+        if (!oldData) return oldData;
+        return oldData.map((n) => n.id === notificationId ? { ...n, read: true } : n);
+      });
     },
   });
 
@@ -63,9 +121,58 @@ export default function RunnerNotifications() {
       if (error) throw error;
     },
     onSuccess: () => {
-      refetch();
+      // Update the cache immediately
+      queryClient.setQueryData(['runner-notifications', user.id], (oldData) => {
+        if (!oldData) return oldData;
+        return oldData.map((n) => ({ ...n, read: true }));
+      });
     },
   });
+
+  // Submit defense
+  const submitDefenseMutation = useMutation({
+    mutationFn: async ({ escrowId }) => {
+      const response = await fetch('/api/escrow/defend-dispute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          escrow_id: escrowId,
+          user_id: user.id,
+          defense_details: defenseDetails,
+          image_base64: defenseImageBase64,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to submit defense');
+      }
+
+      return await response.json();
+    },
+    onSuccess: () => {
+      // Invalidate notifications cache so it refetches from server
+      queryClient.invalidateQueries({
+        queryKey: ['runner-notifications', user?.id],
+      });
+      setDefendingDispute(null);
+      setDefenseDetails('');
+      setDefenseImage(null);
+      setDefenseImageBase64(null);
+    },
+  });
+
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setDefenseImage(file);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setDefenseImageBase64(event.target.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleNotificationClick = (notif) => {
     // Mark as read
@@ -78,6 +185,9 @@ export default function RunnerNotifications() {
         navigate(`/runner/chat/${data.sender_id}`);
       } else if (notif.type === 'accepted' && data.errand_id) {
         navigate(`/runner/job-details/${data.errand_id}`);
+      } else if (notif.type === 'dispute' && data.escrowId) {
+        // Open defense modal for disputes
+        setDefendingDispute(notif);
       }
     } catch (err) {
       console.warn('Navigation error:', err);
@@ -153,6 +263,7 @@ export default function RunnerNotifications() {
                 opacity: notif.read ? 0.6 : 1,
                 borderLeft: `4px solid ${notif.read ? 'transparent' : Colors.primary}`,
                 transition: 'all 0.2s ease',
+                backgroundColor: notif.type === 'dispute' ? Colors.error + '20' : undefined,
               }}
             >
               <div
@@ -162,7 +273,7 @@ export default function RunnerNotifications() {
                   alignItems: 'start',
                 }}
               >
-                <div style={{ fontSize: '24px' }}>
+                <div style={{ fontSize: '24px', color: notif.type === 'dispute' ? Colors.error : Colors.primary }}>
                   {notificationIcons[notif.type] || notificationIcons.default}
                 </div>
                 <div style={{ flex: 1 }}>
@@ -186,15 +297,6 @@ export default function RunnerNotifications() {
                   >
                     {notif.body}
                   </ThemedText>
-                  <ThemedText
-                    style={{
-                      fontSize: '12px',
-                      opacity: 0.5,
-                      display: 'block',
-                    }}
-                  >
-                    {new Date(notif.created_at).toLocaleString()}
-                  </ThemedText>
                 </div>
                 {!notif.read && (
                   <div
@@ -210,6 +312,147 @@ export default function RunnerNotifications() {
               </div>
             </ThemedCard>
           ))}
+        </div>
+      )}
+
+      {/* Defense Modal */}
+      {defendingDispute && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+        }}>
+          <div style={{
+            background: Colors.cardBackground,
+            border: `2px solid ${Colors.primary}`,
+            borderRadius: '12px',
+            padding: '20px',
+            maxWidth: '600px',
+            width: '95%',
+            maxHeight: '80vh',
+            overflowY: 'auto',
+            position: 'relative',
+          }}>
+            <button
+              onClick={() => { setDefendingDispute(null); setDefenseDetails(''); setDefenseImage(null); setDefenseImageBase64(null); }}
+              style={{
+                position: 'absolute',
+                top: '16px',
+                right: '16px',
+                background: 'transparent',
+                border: 'none',
+                fontSize: '24px',
+                cursor: 'pointer',
+                color: Colors.text,
+              }}
+            >
+              ✕
+            </button>
+
+            <h3 style={{ color: Colors.error, marginBottom: '16px', fontSize: '20px', fontWeight: '700' }}>Dispute Against You</h3>
+
+            <div style={{ marginBottom: '16px' }}>
+              <p style={{ margin: 0, color: Colors.primary, fontSize: '12px', fontWeight: '600', textTransform: 'uppercase' }}>Dispute Details</p>
+              <div style={{ marginTop: '8px', padding: '12px', background: Colors.background, borderRadius: '8px', border: `1px solid ${Colors.border}` }}>
+                <p style={{ margin: 0, color: Colors.text, whiteSpace: 'pre-wrap', fontSize: '14px' }}>{defendingDispute.body}</p>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <p style={{ margin: 0, color: Colors.primary, fontSize: '12px', fontWeight: '600', textTransform: 'uppercase', marginBottom: '8px' }}>Your Defense</p>
+              <textarea 
+                value={defenseDetails} 
+                onChange={(e) => setDefenseDetails(e.target.value)} 
+                placeholder="Explain your perspective and provide details to defend against this dispute..." 
+                style={{ 
+                  width: '100%', 
+                  minHeight: '100px', 
+                  padding: '10px', 
+                  borderRadius: '8px', 
+                  border: `1px solid ${Colors.border}`, 
+                  background: Colors.background, 
+                  color: Colors.text, 
+                  fontSize: '16px', 
+                  fontFamily: 'inherit' 
+                }} 
+              />
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <p style={{ margin: 0, color: Colors.primary, fontSize: '12px', fontWeight: '600', textTransform: 'uppercase', marginBottom: '8px' }}>Evidence Image (optional)</p>
+              <div style={{
+                border: `2px dashed ${Colors.border}`,
+                borderRadius: '8px',
+                padding: '16px',
+                textAlign: 'center',
+                backgroundColor: Colors.background,
+                cursor: 'pointer',
+              }}>
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  onChange={handleImageChange}
+                  style={{ display: 'none' }}
+                  id="defense-image-input"
+                />
+                <label htmlFor="defense-image-input" style={{ cursor: 'pointer' }}>
+                  {defenseImage ? (
+                    <div>
+                      <p style={{ margin: '0 0 8px', color: Colors.primary, fontWeight: '600' }}>✓ {defenseImage.name}</p>
+                      <img src={defenseImageBase64} alt="preview" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '4px' }} />
+                    </div>
+                  ) : (
+                    <div>
+                      <p style={{ margin: 0, color: Colors.text, fontWeight: '600' }}>Click to upload image</p>
+                      <p style={{ margin: '4px 0 0', color: Colors.muted, fontSize: '12px' }}>or drag and drop</p>
+                    </div>
+                  )}
+                </label>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button 
+                onClick={() => {
+                  const data = defendingDispute.data ? JSON.parse(defendingDispute.data) : {};
+                  submitDefenseMutation.mutate({ escrowId: data.escrowId });
+                }} 
+                disabled={submitDefenseMutation.isPending || !defenseDetails.trim()} 
+                style={{ 
+                  flex: 1, 
+                  padding: '10px', 
+                  borderRadius: '8px', 
+                  border: 'none', 
+                  background: Colors.primary, 
+                  color: 'white', 
+                  cursor: 'pointer', 
+                  fontWeight: 700,
+                  opacity: submitDefenseMutation.isPending || !defenseDetails.trim() ? 0.6 : 1,
+                }}
+              >
+                {submitDefenseMutation.isPending ? 'Submitting...' : 'Submit Defense'}
+              </button>
+              <button 
+                onClick={() => { setDefendingDispute(null); setDefenseDetails(''); setDefenseImage(null); setDefenseImageBase64(null); }} 
+                style={{ 
+                  flex: 1, 
+                  padding: '10px', 
+                  borderRadius: '8px', 
+                  border: `1px solid ${Colors.border}`, 
+                  background: 'transparent', 
+                  color: Colors.text, 
+                  cursor: 'pointer', 
+                  fontWeight: 600 
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

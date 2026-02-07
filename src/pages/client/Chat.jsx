@@ -208,7 +208,7 @@ export default function Chat() {
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => navigate(`/client/runner-profile/${partner.user_id}`)}
+            onClick={() => navigate(`/client/runner-profile/${partner.id}`)}
           >
             View Profile
           </Button>

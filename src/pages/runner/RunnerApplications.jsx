@@ -16,22 +16,22 @@ const STATUS_CONFIG = {
 export default function RunnerApplications() {
   const navigate = useNavigate();
   const { theme, Colors } = useTheme();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
 
   // Fetch applications
   const { data: applications = [], isLoading, error } = useQuery({
-    queryKey: ['runner-applications', user?.id],
+    queryKey: ['runner-applications', profile?.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('runner_applications')
         .select('*, errands(*)')
-        .eq('runner_id', user.id)
+        .eq('runner_id', profile.id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
       return data || [];
     },
-    enabled: !!user,
+    enabled: !!profile,
   });
 
   // Group by status

@@ -95,7 +95,7 @@ export default function ClientHome() {
               <ThemedCard
                 key={runner.id}
                 clickable
-                onClick={() => navigate(`/client/runner-profile/${runner.user_id}`)}
+                onClick={() => navigate(`/client/runner-profile/${runner.id}`)}
                 style={{ cursor: 'pointer', transition: 'all 0.2s ease', padding: 14 }}
               >
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>

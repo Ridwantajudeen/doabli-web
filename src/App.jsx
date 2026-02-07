@@ -53,7 +53,7 @@ function App() {
               <Route
                 path="/client"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRole="client">
                     <ClientDashboard />
                   </ProtectedRoute>
                 }
@@ -61,7 +61,7 @@ function App() {
               <Route
                 path="/client/home"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRole="client">
                     <ClientDashboard />
                   </ProtectedRoute>
                 }
@@ -69,7 +69,7 @@ function App() {
               <Route
                 path="/client/errands"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRole="client">
                     <ClientDashboard />
                   </ProtectedRoute>
                 }
@@ -77,7 +77,7 @@ function App() {
               <Route
                 path="/client/messages"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRole="client">
                     <ClientDashboard />
                   </ProtectedRoute>
                 }
@@ -85,7 +85,7 @@ function App() {
               <Route
                 path="/client/notifications"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRole="client">
                     <ClientDashboard />
                   </ProtectedRoute>
                 }
@@ -93,7 +93,7 @@ function App() {
               <Route
                 path="/client/profile"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRole="client">
                     <ClientDashboard />
                   </ProtectedRoute>
                 }
@@ -101,7 +101,7 @@ function App() {
               <Route
                 path="/client/errand-details/:id"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRole="client">
                     <ErrandDetails />
                   </ProtectedRoute>
                 }
@@ -109,7 +109,7 @@ function App() {
               <Route
                 path="/client/create-errand"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRole="client">
                     <CreateErrand />
                   </ProtectedRoute>
                 }
@@ -117,7 +117,7 @@ function App() {
               <Route
                 path="/client/runner-profile/:id"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRole="client">
                     <RunnerProfile />
                   </ProtectedRoute>
                 }
@@ -125,7 +125,7 @@ function App() {
               <Route
                 path="/client/chat/:partnerId"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRole="client">
                     <Chat />
                   </ProtectedRoute>
                 }
@@ -135,7 +135,7 @@ function App() {
               <Route
                 path="/runner"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRole="runner">
                     <RunnerDashboard />
                   </ProtectedRoute>
                 }
@@ -143,7 +143,7 @@ function App() {
               <Route
                 path="/runner/home"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRole="runner">
                     <RunnerDashboard />
                   </ProtectedRoute>
                 }
@@ -151,7 +151,7 @@ function App() {
               <Route
                 path="/runner/applications"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRole="runner">
                     <RunnerDashboard />
                   </ProtectedRoute>
                 }
@@ -159,7 +159,7 @@ function App() {
               <Route
                 path="/runner/messages"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRole="runner">
                     <RunnerDashboard />
                   </ProtectedRoute>
                 }
@@ -167,7 +167,7 @@ function App() {
               <Route
                 path="/runner/notifications"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRole="runner">
                     <RunnerDashboard />
                   </ProtectedRoute>
                 }
@@ -175,7 +175,7 @@ function App() {
               <Route
                 path="/runner/profile"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRole="runner">
                     <RunnerDashboard />
                   </ProtectedRoute>
                 }
@@ -183,8 +183,16 @@ function App() {
               <Route
                 path="/runner/job-details/:id"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRole="runner">
                     <JobDetails />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/runner/chat/:partnerId"
+                element={
+                  <ProtectedRoute requiredRole="runner">
+                    <Chat />
                   </ProtectedRoute>
                 }
               />
@@ -192,16 +200,8 @@ function App() {
               <Route
                 path="/admin"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRole="admin">
                     <AdminDashboard />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/runner/chat/:partnerId"
-                element={
-                  <ProtectedRoute>
-                    <Chat />
                   </ProtectedRoute>
                 }
               />

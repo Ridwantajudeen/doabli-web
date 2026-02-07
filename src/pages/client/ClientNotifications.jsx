@@ -1,4 +1,5 @@
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
@@ -20,20 +21,66 @@ export default function ClientNotifications() {
   const navigate = useNavigate();
   const { theme, Colors } = useTheme();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
 
-  const { data: notifications = [], isLoading, refetch } = useQuery({
+  const { data: notifications = [], isLoading } = useQuery({
     queryKey: ['notifications', user?.id],
     queryFn: async () => {
       const { data } = await supabase
         .from('notifications')
         .select('*')
         .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+        .order('id', { ascending: false });
 
       return data || [];
     },
     enabled: !!user,
+    staleTime: Infinity, // Prevent auto-refetch, rely on real-time subscription
   });
+
+  // Real-time subscription for new notifications
+  useEffect(() => {
+    if (!user?.id) return;
+
+    console.log('[ClientNotifications] Setting up real-time subscription for', user.id);
+
+    const channel = supabase
+      .channel(`notifications:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          console.log('[ClientNotifications] New notification received:', payload);
+          queryClient.invalidateQueries({ queryKey: ['notifications', user.id] });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          console.log('[ClientNotifications] Notification updated:', payload);
+          queryClient.invalidateQueries({ queryKey: ['notifications', user.id] });
+        }
+      )
+      .subscribe((status) => {
+        console.log('[ClientNotifications] Subscription status:', status);
+      });
+
+    return () => {
+      console.log('[ClientNotifications] Cleaning up subscription');
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, queryClient]);
 
   const markAsReadMutation = useMutation({
     mutationFn: async (notificationId) => {
@@ -43,9 +90,14 @@ export default function ClientNotifications() {
         .eq('id', notificationId);
 
       if (error) throw error;
+      return notificationId;
     },
-    onSuccess: () => {
-      refetch();
+    onSuccess: (notificationId) => {
+      // Update the cache immediately
+      queryClient.setQueryData(['notifications', user.id], (oldData) => {
+        if (!oldData) return oldData;
+        return oldData.map((n) => n.id === notificationId ? { ...n, read: true } : n);
+      });
     },
   });
 
@@ -60,7 +112,11 @@ export default function ClientNotifications() {
       if (error) throw error;
     },
     onSuccess: () => {
-      refetch();
+      // Update the cache immediately
+      queryClient.setQueryData(['notifications', user.id], (oldData) => {
+        if (!oldData) return oldData;
+        return oldData.map((n) => ({ ...n, read: true }));
+      });
     },
   });
 
@@ -185,15 +241,6 @@ export default function ClientNotifications() {
                     }}
                   >
                     {notif.body}
-                  </ThemedText>
-                  <ThemedText
-                    style={{
-                      fontSize: '12px',
-                      opacity: 0.5,
-                      display: 'block',
-                    }}
-                  >
-                    {new Date(notif.created_at).toLocaleString()}
                   </ThemedText>
                 </div>
                 {!notif.read && (
