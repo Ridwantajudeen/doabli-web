@@ -1,3 +1,5 @@
+//runner profile
+
 import { useState, useEffect } from 'react';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
@@ -6,7 +8,7 @@ import { supabase } from '../../lib/supabase';
 import { showError, showSuccess } from '../../lib/notify';
 import { ThemedText, ThemedCard, ThemedTextInput } from '../../components/ThemedComponents';
 import Button from '../../components/Button';
-import { FiEdit, FiX, FiLogOut, FiUser, FiCamera, FiCheckCircle, FiAlertCircle, FiClock } from 'react-icons/fi';
+import { FiEdit, FiX, FiLogOut, FiUser, FiCamera, FiCheckCircle, FiAlertCircle, FiClock, FiDollarSign, FiTrendingUp } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import KYCVerificationModal from '../../components/KYCVerificationModal';
 
@@ -36,6 +38,77 @@ export default function RunnerProfile() {
   const [showBankDropdown, setShowBankDropdown] = useState(false);
   const [resolvingAccount, setResolvingAccount] = useState(false);
   const [banksList, setBanksList] = useState([]);
+
+  // ✅ NEW: Fetch earnings summary
+  const { data: earningsSummary } = useQuery({
+    queryKey: ['earnings-summary', profile?.id],
+    queryFn: async () => {
+      if (!profile?.id) return null;
+
+      // Fetch all escrows for this runner
+      const { data: escrows, error } = await supabase
+        .from('escrow')
+        .select('id, amount, runner_earnings, status, withdrawn_at, client_status')
+        .eq('runner_id', profile.id);
+
+      if (error) throw error;
+
+      const totalEarned = escrows
+        ?.filter(e => e.client_status === 'confirmed')
+        ?.reduce((sum, e) => sum + Number(e.runner_earnings || 0), 0) || 0;
+
+      const totalWithdrawn = escrows
+        ?.filter(e => e.withdrawn_at)
+        ?.reduce((sum, e) => sum + Number(e.runner_earnings || 0), 0) || 0;
+
+      const availableBalance = escrows
+        ?.filter(e => 
+          (e.status === 'released' || e.status === 'releasable') && 
+          e.client_status === 'confirmed' && 
+          !e.withdrawn_at
+        )
+        ?.reduce((sum, e) => sum + Number(e.runner_earnings || 0), 0) || 0;
+
+      return {
+        totalEarned,
+        totalWithdrawn,
+        availableBalance,
+        pendingJobs: escrows?.filter(e => 
+          e.status === 'funded' && 
+          e.client_status !== 'confirmed'
+        ).length || 0,
+      };
+    },
+    enabled: !!profile?.id,
+  });
+
+  // ✅ NEW: Fetch withdrawal history
+  const { data: withdrawalHistory = [] } = useQuery({
+    queryKey: ['withdrawal-history', profile?.id],
+    queryFn: async () => {
+      if (!profile?.id) return [];
+
+      const { data, error } = await supabase
+        .from('withdrawals')
+        .select(`
+          id,
+          amount,
+          status,
+          reference,
+          created_at,
+          processed_at,
+          escrow_id,
+          bank_accounts(bank_name, account_name, account_number)
+        `)
+        .eq('profile_id', profile.id)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!profile?.id,
+  });
 
   // Fetch banks from backend
   const { isLoading: banksLoading } = useQuery({
@@ -537,6 +610,56 @@ export default function RunnerProfile() {
           </label>
         )}
       </div>
+
+      {/* ✅ NEW: Earnings Summary Card */}
+      {earningsSummary && (
+        <ThemedCard style={{ marginBottom: '20px', background: `linear-gradient(135deg, ${Colors.primary}20 0%, ${Colors.primary}10 100%)`, borderLeft: `4px solid ${Colors.primary}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+            <FiDollarSign size={20} color={Colors.primary} />
+            <ThemedText title style={{ fontSize: '18px', fontWeight: '600', display: 'block', color: Colors.primary }}>
+              Earnings Summary
+            </ThemedText>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <div>
+              <ThemedText style={{ fontSize: '12px', opacity: 0.6, marginBottom: '4px', display: 'block' }}>
+                Total Earned
+              </ThemedText>
+              <ThemedText title style={{ fontSize: '20px', fontWeight: 'bold', display: 'block', color: Colors.primary }}>
+                ₦{earningsSummary.totalEarned.toLocaleString()}
+              </ThemedText>
+            </div>
+
+            <div>
+              <ThemedText style={{ fontSize: '12px', opacity: 0.6, marginBottom: '4px', display: 'block' }}>
+                Total Withdrawn
+              </ThemedText>
+              <ThemedText title style={{ fontSize: '20px', fontWeight: 'bold', display: 'block' }}>
+                ₦{earningsSummary.totalWithdrawn.toLocaleString()}
+              </ThemedText>
+            </div>
+
+            <div>
+              <ThemedText style={{ fontSize: '12px', opacity: 0.6, marginBottom: '4px', display: 'block' }}>
+                Available Balance
+              </ThemedText>
+              <ThemedText title style={{ fontSize: '20px', fontWeight: 'bold', display: 'block', color: '#22c55e' }}>
+                ₦{earningsSummary.availableBalance.toLocaleString()}
+              </ThemedText>
+            </div>
+
+            <div>
+              <ThemedText style={{ fontSize: '12px', opacity: 0.6, marginBottom: '4px', display: 'block' }}>
+                Pending Jobs
+              </ThemedText>
+              <ThemedText title style={{ fontSize: '20px', fontWeight: 'bold', display: 'block' }}>
+                {earningsSummary.pendingJobs}
+              </ThemedText>
+            </div>
+          </div>
+        </ThemedCard>
+      )}
 
       {/* Contact Information */}
       <ThemedCard style={{ marginBottom: '20px' }}>
@@ -1147,6 +1270,45 @@ export default function RunnerProfile() {
             </ThemedText>
           </ThemedCard>
         </div>
+      )}
+
+      {/* ✅ NEW: Withdrawal History */}
+      {withdrawalHistory.length > 0 && (
+        <ThemedCard style={{ marginBottom: '20px' }}>
+          <ThemedText title style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px', display: 'block' }}>
+            Withdrawal History ({withdrawalHistory.length})
+          </ThemedText>
+
+          <div style={{ display: 'grid', gap: '12px' }}>
+            {withdrawalHistory.map((withdrawal) => (
+              <div key={withdrawal.id} style={{ padding: '12px', backgroundColor: theme.background, borderRadius: '8px', borderLeft: `3px solid ${withdrawal.status === 'success' ? '#22c55e' : withdrawal.status === 'pending' ? Colors.warning : Colors.error}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '8px' }}>
+                  <div>
+                    <ThemedText title style={{ fontSize: '18px', fontWeight: '600', marginBottom: '4px', display: 'block', color: withdrawal.status === 'success' ? '#22c55e' : Colors.text }}>
+                      ₦{Number(withdrawal.amount).toLocaleString()}
+                    </ThemedText>
+                    <ThemedText style={{ fontSize: '11px', opacity: 0.6, display: 'block' }}>
+                      {new Date(withdrawal.created_at).toLocaleDateString()} • {new Date(withdrawal.created_at).toLocaleTimeString()}
+                    </ThemedText>
+                  </div>
+                  <div style={{ padding: '4px 8px', borderRadius: '4px', backgroundColor: withdrawal.status === 'success' ? '#22c55e20' : withdrawal.status === 'pending' ? Colors.warning + '20' : Colors.error + '20', fontSize: '11px', fontWeight: '600', textTransform: 'uppercase', color: withdrawal.status === 'success' ? '#22c55e' : withdrawal.status === 'pending' ? Colors.warning : Colors.error }}>
+                    {withdrawal.status}
+                  </div>
+                </div>
+
+                {withdrawal.bank_accounts && (
+                  <ThemedText style={{ fontSize: '12px', opacity: 0.7, display: 'block', marginBottom: '4px' }}>
+                    {withdrawal.bank_accounts.bank_name} - {withdrawal.bank_accounts.account_name}
+                  </ThemedText>
+                )}
+
+                <ThemedText style={{ fontSize: '11px', opacity: 0.5, display: 'block', fontFamily: 'monospace' }}>
+                  Ref: {withdrawal.reference}
+                </ThemedText>
+              </div>
+            ))}
+          </div>
+        </ThemedCard>
       )}
 
       {/* Bio - Editable */}

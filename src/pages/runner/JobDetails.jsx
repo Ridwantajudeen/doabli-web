@@ -1,3 +1,4 @@
+//Errand details on runner side - shows all details about a specific job, including status, client info, and allows actions like applying, marking as done, and withdrawing payment.
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -23,6 +24,8 @@ export default function JobDetails() {
   // ✅ NEW: State for withdrawal flow
   const [showWithdrawalModal, setShowWithdrawalModal] = useState(false);
   const [withdrawalStep, setWithdrawalStep] = useState('confirm'); // 'confirm' or 'processing'
+  // Local flag to hide withdraw button after a request is submitted
+  const [withdrawalSubmitted, setWithdrawalSubmitted] = useState(false);
 
   // Fetch job
   const { data: job, isLoading, error } = useQuery({
@@ -81,16 +84,23 @@ export default function JobDetails() {
 
   // ✅ NEW: Fetch runner's bank account details
   const { data: bankAccount } = useQuery({
-    queryKey: ['runner-bank-account', profile?.id],
+    queryKey: ['runner-bank-account', user?.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('bank_accounts')
         .select('*')
         .eq('user_id', user?.id)
-        .single();
+        .limit(1);
 
-      // It's OK if there's no bank account yet
-      return data || null;
+      // Handle the case where no bank account exists (returns empty array)
+      if (error) {
+        // Only throw if it's a real error, not "no rows found"
+        if (error.code !== 'PGRST116') throw error;
+        return null;
+      }
+
+      // Return first item if exists, otherwise null
+      return data?.length > 0 ? data[0] : null;
     },
     enabled: !!user?.id,
   });
@@ -198,7 +208,7 @@ export default function JobDetails() {
       const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
       // ✅ Send profile_id and user_id for proper identification
-      const res = await fetch(`${apiBase}/api/pay/withdrawals`, {
+      const res = await fetch(`${apiBase}/api/withdrawals`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -223,18 +233,26 @@ export default function JobDetails() {
 
       return data;
     },
-    onSuccess: () => {
-      setWithdrawalStep('processing');
-        setTimeout(() => {
+    onSuccess: (data) => {
+      // If backend queued the withdrawal for admin approval, show appropriate message
+      const status = data?.withdrawal?.status || (data && data.status) || 'pending';
+      if (status === 'pending') {
+        showSuccess('Withdrawal request submitted for admin approval.');
+      } else {
         showSuccess('Withdrawal successful! Money will arrive in 1-3 business days.');
-        setShowWithdrawalModal(false);
-        setWithdrawalStep('confirm');
-        queryClient.invalidateQueries({ queryKey: ['escrow', job?.escrow_id] });
-      }, 2000);
+      }
+
+      setShowWithdrawalModal(false);
+      setWithdrawalStep('confirm');
+      // Hide the withdraw button immediately after a successful request
+      setWithdrawalSubmitted(true);
+      queryClient.invalidateQueries({ queryKey: ['escrow', job?.escrow_id] });
+      queryClient.invalidateQueries({ queryKey: ['withdrawal-history', profile?.id] });
     },
     onError: (err) => {
       showError('withdrawal', err);
       setWithdrawalStep('confirm');
+      setWithdrawalSubmitted(false);
     },
   });
 
@@ -257,15 +275,60 @@ export default function JobDetails() {
 
   const withdrawalDetails = calculateWithdrawalDetails();
 
-  // ✅ Helper: Check if runner can withdraw
+  // ✅ SIMPLIFIED: Check if runner can withdraw
   const canWithdraw = () => {
     if (!escrow) return false;
     if (escrow.status !== 'released' && escrow.status !== 'releasable') return false;
     if (escrow.client_status !== 'confirmed') return false;
     if (escrow.withdrawn_at) return false; // Already withdrawn
-    if (!bankAccount) return false; // No bank account saved
-    if (!profile?.kyc_verified) return false; // Needs KYC for now (optional based on limits)
+    
+    // ✅ SIMPLIFIED: Just check if bank account exists and is approved
+    if (!bankAccount) return false;
+    if (bankAccount.status !== 'approved') return false;
+    // ✅ FIX: If status is approved, the verified field is implicit - don't check it separately
+    
+    // ✅ KYC check moved to BACKEND - frontend just shows button
+    // Backend will enforce: KYC required for amounts > 10k
     return true;
+  };
+
+  // ✅ DEBUG: Log all withdrawal conditions
+  console.log('=== WITHDRAW DEBUG ===');
+  console.log('Escrow exists:', !!escrow);
+  console.log('Escrow status:', escrow?.status);
+  console.log('Client status:', escrow?.client_status);
+  console.log('Already withdrawn:', !!escrow?.withdrawn_at);
+  console.log('Bank account exists:', !!bankAccount);
+  console.log('Bank account data:', bankAccount);
+  console.log('Bank account status:', bankAccount?.status);
+  console.log('canWithdraw():', canWithdraw());
+  console.log('======================');
+
+  // ✅ Helper: Get reason why can't withdraw
+  const getWithdrawBlockReason = () => {
+    if (!escrow) return null;
+    
+    if (escrow.withdrawn_at) {
+      return '✓ Already withdrawn on ' + new Date(escrow.withdrawn_at).toLocaleDateString();
+    }
+    
+    if (escrow.status !== 'released' && escrow.status !== 'releasable') {
+      return '⏳ Waiting for client to confirm job completion';
+    }
+    
+    if (escrow.client_status !== 'confirmed') {
+      return '⏳ Waiting for client approval';
+    }
+    
+    if (!bankAccount) {
+      return '❌ Add bank account details in your profile';
+    }
+    
+    if (bankAccount.status !== 'approved') {
+      return '⏳ Bank account pending admin approval';
+    }
+    
+    return null;
   };
 
   if (isLoading) {
@@ -597,27 +660,38 @@ export default function JobDetails() {
           Browse More Jobs
         </Button>
 
-        {/* ✅ NEW: Withdraw Button */}
-        {canWithdraw() && (
+        {/* ✅ UPDATED: Withdraw Button - Shows for all approved bank accounts */}
+        {canWithdraw() && !withdrawalSubmitted && (
           <Button
             variant="primary"
             size="md"
             onClick={() => setShowWithdrawalModal(true)}
-            style={{ width: '100%', backgroundColor: '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+            style={{ 
+              width: '100%', 
+              backgroundColor: '#22c55e', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              gap: '8px' 
+            }}
           >
             <FiDollarSign size={18} /> Withdraw Payment
           </Button>
         )}
 
         {/* Show reason if can't withdraw */}
-        {!canWithdraw() && escrow && escrow.status === 'released' && (
-          <div style={{ padding: '12px', backgroundColor: '#ef444420', borderRadius: '8px', textAlign: 'center' }}>
-            <ThemedText style={{ fontSize: '13px', color: '#ef4444' }}>
-              {!bankAccount
-                ? '❌ Add bank account details to withdraw'
-                : !profile?.kyc_verified
-                ? '❌ Complete KYC verification to withdraw'
-                : '❌ Not eligible for withdrawal yet'}
+        {!canWithdraw() && escrow && (
+          <div style={{ 
+            padding: '12px', 
+            backgroundColor: escrow.withdrawn_at ? '#8b5cf620' : '#ef444420', 
+            borderRadius: '8px', 
+            textAlign: 'center' 
+          }}>
+            <ThemedText style={{ 
+              fontSize: '13px', 
+              color: escrow.withdrawn_at ? '#8b5cf6' : '#ef4444'
+            }}>
+              {getWithdrawBlockReason()}
             </ThemedText>
           </div>
         )}

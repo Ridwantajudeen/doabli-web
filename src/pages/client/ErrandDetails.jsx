@@ -1,3 +1,5 @@
+//errand details page - shows all details about a specific errand, including status, assigned runner, applications, and allows actions like confirming completion, raising disputes, and leaving reviews.
+
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';

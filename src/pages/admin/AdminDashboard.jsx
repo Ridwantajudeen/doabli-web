@@ -7,6 +7,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { showError, showSuccess } from '../../lib/notify';
+import AdminWithdrawals from './AdminWithdrawals';
 
 export default function AdminDashboard() {
   const { Colors } = useTheme();
@@ -1737,7 +1738,7 @@ export default function AdminDashboard() {
           overflowX: 'auto',
           paddingBottom: '16px',
         }}>
-          {['dashboard', 'users', 'errands', 'payments', 'disputes', 'transactions', 'kyc', 'bank-accounts', 'analytics', 'settings'].map((tab) => (
+          {['dashboard', 'users', 'errands', 'payments', 'disputes', 'transactions', 'kyc', 'bank-accounts', 'withdrawals', 'analytics', 'settings'].map((tab) => (
             <button
               key={tab}
               onClick={() => {
@@ -1772,6 +1773,7 @@ export default function AdminDashboard() {
         {activeTab === 'transactions' && renderTransactions()}
         {activeTab === 'kyc' && renderKYC()}
         {activeTab === 'bank-accounts' && renderBankAccounts()}
+        {activeTab === 'withdrawals' && <AdminWithdrawals />}
         {activeTab === 'analytics' && renderAuditLogs()}
         {activeTab === 'settings' && renderSettings()}
       </div>
