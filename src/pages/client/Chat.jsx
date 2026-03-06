@@ -7,6 +7,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { ThemedText, ThemedTextInput, ThemedCard } from '../../components/ThemedComponents';
 import Button from '../../components/Button';
+import Avatar from '../../components/Avatar';
 import { FiArrowLeft, FiMessageSquare, FiCheck } from 'react-icons/fi';
 
 export default function Chat() {
@@ -22,6 +23,8 @@ export default function Chat() {
   const { data: messages = [], isLoading } = useQuery({
     queryKey: ['messages', user?.id, partnerId],
     queryFn: async () => {
+      if (!user?.id || !partnerId) return [];
+
       const { data, error } = await supabase
         .from('messages')
         .select('*')
@@ -31,13 +34,15 @@ export default function Chat() {
       if (error) throw error;
       return data || [];
     },
-    enabled: !!user && !!partnerId,
+    enabled: !!user?.id && !!partnerId,
   });
 
   // Fetch partner profile
   const { data: partner } = useQuery({
     queryKey: ['partner', partnerId],
     queryFn: async () => {
+      if (!partnerId) return null;
+
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -89,14 +94,25 @@ export default function Chat() {
     const markAsRead = async () => {
       if (!user || !partnerId) return;
 
-      await supabase
-        .from('messages')
-        .update({ read_at: new Date().toISOString() })
-        .eq('receiver_id', user.id)
-        .eq('sender_id', partnerId)
-        .is('read_at', null);
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+        
+        const response = await fetch(`${apiUrl}/api/messages/mark-as-read`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            receiver_id: user.id,
+            sender_id: partnerId,
+          }),
+        });
 
-      queryClient.invalidateQueries(['messages', user?.id, partnerId]);
+        if (response.ok) {
+          queryClient.invalidateQueries(['messages', user?.id, partnerId]);
+        }
+      } catch (err) {
+        console.error('[Chat] Error marking messages as read:', err);
+        // Don't show error to user - marking as read is not critical
+      }
     };
 
     markAsRead();

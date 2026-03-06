@@ -15,6 +15,8 @@ export default function ClientMessages() {
   const { data: conversations = [], isLoading } = useQuery({
     queryKey: ['messages', user?.id],
     queryFn: async () => {
+      if (!user?.id) return [];
+
       const { data } = await supabase
         .from('messages')
         .select('*')
@@ -55,7 +57,7 @@ export default function ClientMessages() {
         };
       });
     },
-    enabled: !!user,
+    enabled: !!user?.id,
   });
 
 
@@ -97,10 +99,8 @@ export default function ClientMessages() {
         </div>
       ) : (
         <div style={{ display: 'grid', gap: '12px' }}>
-          {conversations.map((conv) => {
-            const avatarUrl = getPublicAvatar(conv.avatar_url);
-            return (
-              <ThemedCard
+          {conversations.map((conv) => (
+            <ThemedCard
                 key={conv.partnerId}
                 clickable
                 onClick={() => navigate(`/client/chat/${conv.partnerId}`)}
@@ -162,10 +162,9 @@ export default function ClientMessages() {
                   </ThemedText>
                 </div>
               </ThemedCard>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }

@@ -15,6 +15,8 @@ export default function RunnerMessages() {
   const { data: conversations = [], isLoading } = useQuery({
     queryKey: ['runner-messages', user?.id],
     queryFn: async () => {
+      if (!user?.id) return [];
+
       const { data } = await supabase
         .from('messages')
         .select('*')
@@ -52,7 +54,7 @@ export default function RunnerMessages() {
         };
       });
     },
-    enabled: !!user,
+    enabled: !!user?.id,
   });
 
   return (
