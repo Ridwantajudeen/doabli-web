@@ -6,7 +6,8 @@ import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { ThemedView, ThemedText, ThemedCard, ThemedTextInput } from '../../components/ThemedComponents';
 import Button from '../../components/Button';
-import { FiUser, FiStar, FiBriefcase } from 'react-icons/fi';
+import Avatar from '../../components/Avatar';
+import { FiStar, FiBriefcase } from 'react-icons/fi';
 
 export default function ClientHome() {
   const navigate = useNavigate();
@@ -100,22 +101,11 @@ export default function ClientHome() {
               >
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                   {/* Avatar */}
-                  {runner.avatar_url ? (
-                    (() => {
-                      const url = String(runner.avatar_url || '');
-                      if (url.startsWith('http') || url.startsWith('data:')) {
-                        return <img src={url} alt="Avatar" style={{ width: 64, height: 64, borderRadius: 32 }} />;
-                      }
-                      try {
-                        const publicUrl = supabase.storage.from('avatars').getPublicUrl(url).publicUrl;
-                        return <img src={publicUrl} alt="Avatar" style={{ width: 64, height: 64, borderRadius: 32 }} />;
-                      } catch {
-                        return <div style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FiUser size={32} color="#16a34a" /></div>;
-                      }
-                    })()
-                  ) : (
-                    <div style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FiUser size={32} color="#16a34a" /></div>
-                  )}
+                  <Avatar
+                    url={runner.avatar_url}
+                    size={64}
+                    kycVerified={runner.kyc_verified}
+                  />
 
                   {/* Info */}
                   <div style={{ flex: 1 }}>

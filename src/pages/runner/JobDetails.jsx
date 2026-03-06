@@ -387,7 +387,8 @@ export default function JobDetails() {
         >
           <div style={{ fontSize: '12px', opacity: 0.9, marginBottom: '4px' }}>Budget</div>
           <div style={{ fontSize: '32px', fontWeight: 'bold' }}>
-            ₦{job.price.toLocaleString()}
+            ₦{(job.proposed_price || job.price).toLocaleString()}
+            {job.is_hourly ? <span style={{ fontSize: '14px', marginLeft: '8px' }}>/hr</span> : null}
           </div>
         </div>
       </div>
@@ -418,6 +419,95 @@ export default function JobDetails() {
             {new Date(job.created_at).toLocaleString()}
           </ThemedText>
         </div>
+
+        {/* ✨ Runner Response Section: show on direct hire offered to this runner (only if not accepted yet) */}
+        {job.status === 'offered' && job.assigned_to === profile?.id && existingApp?.status === 'pending' && (
+          <div style={{ marginTop: '16px' }}>
+            <ThemedText title style={{ fontSize: '16px', fontWeight: '600', marginBottom: '8px', display: 'block' }}>
+              Respond to Errand Offer
+            </ThemedText>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+              <Button
+                variant="secondary"
+                onClick={async () => {
+                  if (!window.confirm('Decline this errand offer?')) return;
+                  try {
+                    const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+                    const res = await fetch(`${apiBase}/api/errands/direct-hire/${job.id}/respond`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ runner_id: profile.id, action: 'reject' }),
+                    });
+                    if (!res.ok) {
+                      const err = await res.json().catch(() => ({}));
+                      throw new Error(err.error || 'Failed to decline');
+                    }
+                    showSuccess('Offer declined');
+                    queryClient.invalidateQueries({ queryKey: ['job', id] });
+                    queryClient.invalidateQueries({ queryKey: ['runner-applications'] });
+                  } catch (err) {
+                    showError('decline', err);
+                  }
+                }}
+              >
+                Decline
+              </Button>
+
+              <Button
+                variant="warning"
+                onClick={async () => {
+                  const proposed = window.prompt('Enter your counteroffer amount (NGN)', String(job.proposed_price || job.price));
+                  if (!proposed) return;
+                  const note = window.prompt('Add an optional note for this counteroffer (or leave blank)') || '';
+                  try {
+                    const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+                    const res = await fetch(`${apiBase}/api/errands/${job.id}/propose-price`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ user_id: profile.id, proposed_price: Number(proposed), note, receiver_id: job.posted_by }),
+                    });
+                    if (!res.ok) {
+                      const err = await res.json().catch(() => ({}));
+                      throw new Error(err.error || 'Failed to send counteroffer');
+                    }
+                    showSuccess('Counteroffer sent');
+                    queryClient.invalidateQueries({ queryKey: ['job', id] });
+                  } catch (err) {
+                    showError('counteroffer', err);
+                  }
+                }}
+              >
+                Counteroffer
+              </Button>
+
+              <Button
+                variant="primary"
+                onClick={async () => {
+                  if (!window.confirm('Accept this offer? Client will need to fund before assignment.')) return;
+                  try {
+                    const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+                    const res = await fetch(`${apiBase}/api/errands/${job.id}/accept-offer`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ runner_id: profile.id }),
+                    });
+                    if (!res.ok) {
+                      const err = await res.json().catch(() => ({}));
+                      throw new Error(err.error || 'Failed to accept');
+                    }
+                    showSuccess('Offer accepted — waiting for client funding');
+                    queryClient.invalidateQueries({ queryKey: ['job', id] });
+                    queryClient.invalidateQueries({ queryKey: ['runner-applications'] });
+                  } catch (err) {
+                    showError('accept-offer', err);
+                  }
+                }}
+              >
+                Accept
+              </Button>
+            </div>
+          </div>
+        )}
       </ThemedCard>
 
       {/* Description */}

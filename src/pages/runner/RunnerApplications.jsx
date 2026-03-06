@@ -1,11 +1,12 @@
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { ThemedText, ThemedCard } from '../../components/ThemedComponents';
 import Button from '../../components/Button';
 import { FiClock, FiCheck, FiX, FiMapPin, FiClipboard } from 'react-icons/fi';
+import { showSuccess, showError } from '../../lib/notify';
 
 const STATUS_CONFIG = {
   pending: { color: '#3b82f6', label: 'Pending', icon: <FiClock /> },
@@ -19,7 +20,7 @@ export default function RunnerApplications() {
   const { user, profile } = useAuth();
 
   // Fetch applications
-  const { data: applications = [], isLoading, error } = useQuery({
+  const { data: applications = [], isLoading, error, refetch } = useQuery({
     queryKey: ['runner-applications', profile?.id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -34,6 +35,86 @@ export default function RunnerApplications() {
     enabled: !!profile,
   });
 
+  // ✨ Direct hire response mutation
+  const respondToHireMutation = useMutation({
+    mutationFn: async ({ errandId, action }) => {
+      const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+      const res = await fetch(`${apiBase}/api/errands/direct-hire/${errandId}/respond`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          runner_id: profile.id,
+          action, // 'accept' or 'reject'
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Failed to ${action} direct hire request`);
+      }
+
+      return await res.json();
+    },
+    onSuccess: (data, { action }) => {
+      showSuccess(action === 'accept' ? 'Direct hire accepted! Client will fund the job.' : 'Direct hire rejected.');
+      refetch();
+    },
+    onError: (err) => {
+      showError('direct-hire-response', err);
+    },
+  });
+
+  // ✨ Propose price (counteroffer) mutation
+  const proposePriceMutation = useMutation({
+    mutationFn: async ({ errandId, proposed_price, note, receiver_id }) => {
+      const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const res = await fetch(`${apiBase}/api/errands/${errandId}/propose-price`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: profile.id, proposed_price, note, receiver_id }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to propose price');
+      }
+      return await res.json();
+    },
+    onSuccess: () => {
+      showSuccess('Counteroffer sent');
+      refetch();
+    },
+    onError: (err) => showError('propose-price', err),
+  });
+
+  // ✨ Accept offer (moves to pending funding)
+  const acceptOfferMutation = useMutation({
+    mutationFn: async ({ errandId }) => {
+      const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const res = await fetch(`${apiBase}/api/errands/${errandId}/accept-offer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runner_id: profile.id }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to accept offer');
+      }
+      return await res.json();
+    },
+    onSuccess: () => {
+      showSuccess('Offer accepted — waiting for client funding');
+      refetch();
+    },
+    onError: (err) => showError('accept-offer', err),
+  });
+
+  const handleDirectHireResponse = (errandId, action) => {
+    if (window.confirm(`Are you sure you want to ${action} this direct hire request?`)) {
+      respondToHireMutation.mutate({ errandId, action });
+    }
+  };
+
   // Group by status
   const grouped = {
     pending: applications.filter((a) => a.status === 'pending'),
@@ -43,25 +124,43 @@ export default function RunnerApplications() {
 
   const ApplicationCard = ({ app }) => {
     const config = STATUS_CONFIG[app.status];
+    const isDirectHire = app.errands?.status === 'offered';
+    const isPendingDirectHire = isDirectHire && app.status === 'pending';
+
     return (
       <ThemedCard
-        clickable
+        clickable={true}
         onClick={() => navigate(`/runner/job-details/${app.errand_id}`)}
         style={{ cursor: 'pointer' }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: '12px' }}>
           <div style={{ flex: 1 }}>
-            <ThemedText
-              title
-              style={{
-                fontSize: '16px',
-                fontWeight: '600',
-                marginBottom: '4px',
-                display: 'block',
-              }}
-            >
-              {app.errands?.title}
-            </ThemedText>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <ThemedText
+                title
+                style={{
+                  fontSize: '16px',
+                  fontWeight: '600',
+                  display: 'block',
+                }}
+              >
+                {app.errands?.title}
+              </ThemedText>
+              {isDirectHire && (
+                <span
+                  style={{
+                    backgroundColor: Colors.primary + '20',
+                    color: Colors.primary,
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    fontSize: '11px',
+                    fontWeight: '600',
+                  }}
+                >
+                  Direct Hire
+                </span>
+              )}
+            </div>
             <ThemedText style={{ fontSize: '13px', opacity: 0.6, marginBottom: '6px', display: 'block' }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                 <FiMapPin />
@@ -69,7 +168,7 @@ export default function RunnerApplications() {
               </span>
             </ThemedText>
             <ThemedText style={{ fontSize: '12px', opacity: 0.5, display: 'block' }}>
-              Applied {new Date(app.created_at).toLocaleDateString()}
+              {isDirectHire ? 'Hire request received' : 'Applied'} {new Date(app.created_at).toLocaleDateString()}
             </ThemedText>
           </div>
 
@@ -83,7 +182,7 @@ export default function RunnerApplications() {
                 display: 'block',
               }}
             >
-              ₦{app.errands?.price.toLocaleString()}
+              ₦{(app.errands?.proposed_price || app.errands?.price).toLocaleString()}
             </ThemedText>
             <div
               style={{
@@ -100,6 +199,8 @@ export default function RunnerApplications() {
             </div>
           </div>
         </div>
+
+        {/* Actions moved to errand details page. Click to view and respond. */}
       </ThemedCard>
     );
   };

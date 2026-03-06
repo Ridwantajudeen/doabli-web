@@ -2,7 +2,7 @@
 
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { showError, showSuccess } from '../../lib/notify';
 import { useTheme } from '../../context/ThemeContext';
@@ -10,13 +10,17 @@ import { useAuth } from '../../context/AuthContext';
 import { ThemedView, ThemedText, ThemedCard } from '../../components/ThemedComponents';
 import Button from '../../components/Button';
 import { FiClock, FiUser, FiCheck, FiX, FiMapPin, FiStar, FiArrowLeft, FiAlertTriangle, FiCamera } from 'react-icons/fi';
+import Avatar from '../../components/Avatar';
 
+// ✅ CHANGE 1: Added 'offered' and 'pending_funding' so the badge shows correct labels
 const STATUS_CONFIG = {
-  posted: { color: '#3b82f6', label: 'Posted', icon: <FiClock /> },
-  assigned: { color: '#f59e0b', label: 'Assigned', icon: <FiUser /> },
-  completed: { color: '#22c55e', label: 'Completed', icon: <FiCheck /> },
-  canceled: { color: '#ef4444', label: 'Canceled', icon: <FiX /> },
-  disputed: { color: '#ef4444', label: 'Disputed', icon: <FiX /> },
+  posted:          { color: '#3b82f6', label: 'Posted',           icon: <FiClock /> },
+  offered:         { color: '#a855f7', label: 'Offer Sent',       icon: <FiClock /> },
+  pending_funding: { color: '#f59e0b', label: 'Awaiting Payment', icon: <FiClock /> },
+  assigned:        { color: '#f59e0b', label: 'Assigned',         icon: <FiUser />  },
+  completed:       { color: '#22c55e', label: 'Completed',        icon: <FiCheck /> },
+  canceled:        { color: '#ef4444', label: 'Canceled',         icon: <FiX />     },
+  disputed:        { color: '#ef4444', label: 'Disputed',         icon: <FiX />     },
 };
 
 export default function ErrandDetails() {
@@ -38,6 +42,10 @@ export default function ErrandDetails() {
   
   // Completion image state
   const [completionImage, setCompletionImage] = useState(null);
+
+  // Counteroffer state (client can edit proposed price to respond to runner)
+  const [isEditingPrice, setIsEditingPrice] = useState(false);
+  const [counterofferPrice, setCounterofferPrice] = useState('');
 
   // Fetch errand
   const { data: errand, isLoading, error } = useQuery({
@@ -115,7 +123,25 @@ export default function ErrandDetails() {
     enabled: !!errand && !errand.assigned_to,
   });
 
-  // Confirm job completion and release payment - use backend so runner_earnings is calculated
+  // Fetch runner_application for direct-hire (to check if runner accepted)
+  const { data: directHireApp } = useQuery({
+    queryKey: ['directHireApp', id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('runner_applications')
+        .select('*')
+        .eq('errand_id', id)
+        .neq('status', 'pending')
+        .limit(1)
+        .single();
+
+      if (error) return null;
+      return data;
+    },
+    enabled: !!id,
+  });
+
+  // Confirm job completion and release payment
   const confirmMutation = useMutation({
     mutationFn: async () => {
       const apiUrl = import.meta.env.VITE_API_URL || '';
@@ -150,7 +176,6 @@ export default function ErrandDetails() {
   // Raise dispute
   const disputeMutation = useMutation({
     mutationFn: async () => {
-      // Convert image to base64 if provided
       let imageBase64 = null;
       if (disputeImage) {
         const reader = new FileReader();
@@ -307,6 +332,149 @@ export default function ErrandDetails() {
     }
   };
 
+  // Counteroffer mutation
+  const counterofferMutation = useMutation({
+    mutationFn: async () => {
+      const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const price = Number(counterofferPrice);
+
+      if (!price || price <= 0) {
+        throw new Error('Please enter a valid price');
+      }
+
+      const res = await fetch(`${apiBase}/api/errands/${id}/propose-price`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: profile?.id || user.id,
+          proposed_price: price,
+          note: 'Updated offer',
+          receiver_id: errand.assigned_to,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to send counteroffer');
+      }
+
+      return await res.json();
+    },
+    onSuccess: () => {
+      showSuccess('Price offer updated! Runner will see the update in chat.');
+      setIsEditingPrice(false);
+      setCounterofferPrice('');
+      queryClient.invalidateQueries({ queryKey: ['errand', id] });
+    },
+    onError: (err) => {
+      showError('counteroffer', err);
+    },
+  });
+
+  // Fund errand mutation.
+  // Opens Paystack inline directly (no server-side Paystack init) — same pattern
+  // as the working createErrand flow. After payment succeeds, calls /verify on the
+  // backend which updates escrow, errand, and runner_applications.
+  const fundMutation = useMutation({
+    mutationFn: async () => {
+      const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+      if (!escrow?.id || !escrow?.amount) {
+        throw new Error('Escrow data not loaded yet — please try again');
+      }
+
+      // Ensure Paystack inline script is loaded
+      if (!window.PaystackPop) {
+        const script = document.createElement('script');
+        script.src = 'https://js.paystack.co/v1/inline.js';
+        script.async = true;
+        document.body.appendChild(script);
+        await new Promise((resolve, reject) => {
+          script.onload = resolve;
+          script.onerror = () => reject(new Error('Failed to load Paystack'));
+        });
+      }
+
+      const payKey = import.meta.env.VITE_PAYSTACK_KEY;
+      if (!payKey) throw new Error('VITE_PAYSTACK_KEY is not set');
+
+      return new Promise((resolve, reject) => {
+        const handler = window.PaystackPop.setup({
+          key: payKey,
+          email: user?.email || profile?.email,
+          amount: Math.round(escrow.amount * 100), // naira → kobo
+          currency: 'NGN',
+
+          callback: function (response) {
+            // Payment completed — verify with backend using Paystack's reference.
+            // Backend's resolveMetadata will recover escrow_id from our DB since
+            // Paystack won't have our metadata (we didn't pre-initialize with it).
+            const paystackRef = response.reference;
+            console.log('[Paystack callback] Payment complete, ref:', paystackRef);
+
+            // Tell backend: "this Paystack reference belongs to this escrow"
+            fetch(`${apiBase}/api/pay/verify/${encodeURIComponent(paystackRef)}?escrow_id=${escrow.id}&errand_id=${id}&type=direct_hire_funding`)
+              .then(async (verifyRes) => {
+                const verifyData = await verifyRes.json().catch(() => ({}));
+                if (verifyRes.ok && verifyData.success) {
+                  showSuccess('Payment verified! Errand is now assigned.');
+                  queryClient.invalidateQueries({ queryKey: ['escrow', id] });
+                  queryClient.invalidateQueries({ queryKey: ['errand', id] });
+                  queryClient.invalidateQueries({ queryKey: ['directHireApp', id] });
+                  queryClient.invalidateQueries({ queryKey: ['runner', errand?.assigned_to] });
+                  queryClient.invalidateQueries({ queryKey: ['client-errands'] });
+                  resolve(verifyData);
+                } else {
+                  console.error('[Paystack callback] verify failed:', verifyData);
+                  showError('generic', verifyData?.error || 'Verification failed — please refresh the page.');
+                  reject(new Error(verifyData?.error || 'Verification failed'));
+                }
+              })
+              .catch((err) => {
+                console.error('[Paystack callback] network error:', err);
+                showError('generic', 'Verification error — please refresh to see your status.');
+                reject(err);
+              });
+          },
+
+          onClose: function () {
+            console.log('[Paystack] Modal closed by user');
+            resolve(null); // not an error — user just closed
+          },
+        });
+
+        if (handler) {
+          handler.openIframe();
+        } else {
+          reject(new Error('Paystack failed to initialize'));
+        }
+      });
+    },
+    onError: (err) => {
+      console.error('[fundMutation] Error:', err);
+      showError('funding', err?.message || 'Failed to initiate payment');
+    },
+  });
+
+  // Poll for status update after returning from Paystack redirect (fallback for redirect flow)
+  useEffect(() => {
+    if (!id) return;
+
+    const returnErrandId = sessionStorage.getItem('paystack_return_errand');
+    if (returnErrandId !== id) return;
+
+    const poll = async () => {
+      console.log('[poll] Refetching errand/escrow after Paystack redirect return');
+      await queryClient.invalidateQueries({ queryKey: ['escrow', id] });
+      await queryClient.invalidateQueries({ queryKey: ['errand', id] });
+      await queryClient.invalidateQueries({ queryKey: ['directHireApp', id] });
+      sessionStorage.removeItem('paystack_return_errand');
+    };
+
+    const timer = setTimeout(poll, 1500);
+    return () => clearTimeout(timer);
+  }, [id]);
+
   if (isLoading) {
     return (
       <ThemedView style={{ minHeight: '100vh', padding: '40px' }}>
@@ -331,8 +499,6 @@ export default function ErrandDetails() {
   }
 
   const config = STATUS_CONFIG[errand.status] || STATUS_CONFIG.posted;
-  // Allow cancellation only when the errand is still unassigned ('posted').
-  // Once assigned, the cancel button is hidden to prevent client-side cancel.
   const canCancel = errand.status === 'posted';
 
   return (
@@ -388,20 +554,27 @@ export default function ErrandDetails() {
         </ThemedText>
       </div>
 
-      {/* Price */}
+      {/* Price & Negotiation */}
       <ThemedCard
         style={{
           backgroundColor: Colors.primary,
           color: 'white',
           padding: '20px',
           marginBottom: '24px',
-          textAlign: 'center',
         }}
       >
-        <div style={{ fontSize: '14px', opacity: 0.9, marginBottom: '8px' }}>Payment</div>
-        <div style={{ fontSize: '36px', fontWeight: 'bold' }}>
-          ₦{errand.price.toLocaleString()}
+        <div style={{ fontSize: '14px', opacity: 0.9, marginBottom: '8px' }}>
+          {errand.proposed_price && errand.proposed_price !== errand.price ? 'Negotiated Price' : 'Payment'}
         </div>
+        <div style={{ fontSize: '36px', fontWeight: 'bold', marginBottom: '12px' }}>
+          ₦{(errand.proposed_price || errand.price).toLocaleString()}
+          {errand.is_hourly && <span style={{ fontSize: '20px' }}>/hr</span>}
+        </div>
+        {errand.proposed_price && errand.proposed_price !== errand.price && (
+          <div style={{ fontSize: '12px', opacity: 0.8, borderTop: '1px solid rgba(255,255,255,0.3)', paddingTop: '8px' }}>
+            Base price: ₦{errand.price.toLocaleString()}
+          </div>
+        )}
       </ThemedCard>
 
       {/* Details */}
@@ -458,19 +631,11 @@ export default function ErrandDetails() {
           </ThemedText>
 
           <div style={{ display: 'flex', gap: '16px', alignItems: 'start' }}>
-              <div
-                style={{
-                  width: '60px',
-                  height: '60px',
-                  borderRadius: '30px',
-                  backgroundColor: Colors.primary + '20',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-              <FiUser size={32} color={Colors.primary} />
-            </div>
+              <Avatar
+                url={runner?.avatar_url}
+                size={60}
+                kycVerified={runner?.kyc_verified}
+              />
 
             <div style={{ flex: 1 }}>
               <ThemedText
@@ -497,6 +662,125 @@ export default function ErrandDetails() {
               View Profile
             </Button>
           </div>
+        </ThemedCard>
+      )}
+
+      {/* Price Negotiation - Client can edit/counter the price */}
+      {runner && errand.status === 'offered' && (!directHireApp || directHireApp.status === 'pending') && (
+        <ThemedCard style={{ marginBottom: '24px', backgroundColor: Colors.primary + '10', borderLeft: `4px solid ${Colors.primary}` }}>
+          <ThemedText
+            title
+            style={{ fontSize: '18px', fontWeight: '600', marginBottom: '12px', display: 'block', color: Colors.primary }}
+          >
+            Price Negotiation
+          </ThemedText>
+          <ThemedText style={{ fontSize: '14px', marginBottom: '16px', opacity: 0.8, display: 'block' }}>
+            Current offer: ₦{(errand.proposed_price || errand.price).toLocaleString()}
+            {errand.is_hourly ? '/hr' : ''}
+          </ThemedText>
+
+          {!isEditingPrice ? (
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setIsEditingPrice(true);
+                setCounterofferPrice(String(errand.proposed_price || errand.price));
+              }}
+              style={{ width: '100%' }}
+            >
+              Edit Price Offer
+            </Button>
+          ) : (
+            <div>
+              <input
+                type="number"
+                value={counterofferPrice}
+                onChange={(e) => setCounterofferPrice(e.target.value)}
+                placeholder="Enter new price"
+                step="0.01"
+                min="0"
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  marginBottom: '12px',
+                  border: `1px solid ${theme.uiBackground}`,
+                  borderRadius: '6px',
+                  backgroundColor: Colors.background,
+                  color: Colors.text,
+                  fontSize: '16px',
+                  boxSizing: 'border-box',
+                }}
+              />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <Button
+                  variant="primary"
+                  onClick={() => counterofferMutation.mutate()}
+                  disabled={counterofferMutation.isPending}
+                  style={{ width: '100%' }}
+                >
+                  {counterofferMutation.isPending ? 'Sending...' : 'Send Offer'}
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setIsEditingPrice(false);
+                    setCounterofferPrice('');
+                  }}
+                  disabled={counterofferMutation.isPending}
+                  style={{ width: '100%' }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+        </ThemedCard>
+      )}
+
+      {/* Fund Errand - Show when runner has accepted and escrow is pending payment */}
+      {directHireApp && directHireApp.status === 'accepted_pending_funding' && escrow?.status === 'pending_payment' && (
+        <ThemedCard style={{ marginBottom: '24px', backgroundColor: '#22c55e20', borderLeft: `4px solid #22c55e` }}>
+          <ThemedText
+            title
+            style={{ fontSize: '18px', fontWeight: '600', marginBottom: '12px', display: 'block', color: '#22c55e' }}
+          >
+            ✓ Runner Accepted!
+          </ThemedText>
+          <ThemedText style={{ fontSize: '14px', marginBottom: '16px', opacity: 0.8, display: 'block' }}>
+            Great! {runner?.first_name} has accepted your offer. Now fund the errand to confirm the booking.
+          </ThemedText>
+          <div style={{ marginBottom: '16px', backgroundColor: Colors.background, padding: '12px', borderRadius: '8px' }}>
+            <ThemedText style={{ fontSize: '12px', opacity: 0.7, marginBottom: '4px', display: 'block' }}>
+              Amount to fund:
+            </ThemedText>
+            <ThemedText style={{ fontSize: '24px', fontWeight: '600', color: '#22c55e', display: 'block' }}>
+              ₦{escrow?.amount?.toLocaleString()}
+              {errand.is_hourly ? '/hr' : ''}
+            </ThemedText>
+          </div>
+          <Button
+            variant="primary"
+            onClick={() => fundMutation.mutate()}
+            disabled={fundMutation.isPending}
+            style={{ width: '100%', backgroundColor: '#22c55e' }}
+          >
+            {fundMutation.isPending ? 'Processing...' : 'Fund Errand Now'}
+          </Button>
+        </ThemedCard>
+      )}
+
+      {/* Payment Pending Verification - show after Paystack redirect returns but verify not yet done */}
+      {escrow?.status === 'pending_payment' && errand?.status === 'pending_funding' && !directHireApp && (
+        <ThemedCard style={{ marginBottom: '24px', backgroundColor: '#f59e0b20', borderLeft: '4px solid #f59e0b' }}>
+          <ThemedText
+            title
+            style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px', display: 'block', color: '#f59e0b' }}
+          >
+            Payment Pending Verification
+          </ThemedText>
+          <ThemedText style={{ fontSize: '14px', opacity: 0.8, display: 'block' }}>
+            Your payment was submitted and is being verified. This page will update automatically.
+          </ThemedText>
         </ThemedCard>
       )}
 
@@ -532,19 +816,11 @@ export default function ErrandDetails() {
                 }}
               >
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
-                  <div
-                    style={{
-                      width: '50px',
-                      height: '50px',
-                      borderRadius: '25px',
-                      backgroundColor: Colors.primary + '20',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <FiUser size={24} color={Colors.primary} />
-                  </div>
+                  <Avatar
+                    url={app.runner?.avatar_url}
+                    size={50}
+                    kycVerified={app.runner?.kyc_verified}
+                  />
 
                   <div style={{ flex: 1 }}>
                     <ThemedText
@@ -578,7 +854,7 @@ export default function ErrandDetails() {
         </ThemedCard>
       )}
 
-      {/* Dispute Resolved in Client's Favor - Errand returns to posted */}
+      {/* Dispute Resolved in Client's Favor */}
       {errand?.status === 'posted' && escrow && escrow.status === 'refunded' && escrow.dispute_resolved_at && (
         <ThemedCard style={{ marginBottom: '24px', backgroundColor: '#22c55e20', borderLeft: `4px solid #22c55e` }}>
           <ThemedText
@@ -603,7 +879,7 @@ export default function ErrandDetails() {
         </ThemedCard>
       )}
 
-      {/* Job Completion Section - Show when runner marks job done */}
+      {/* Job Completion Section */}
       {escrow && escrow.runner_status === 'completed' && escrow.client_status === 'pending' && escrow.status !== 'refunded' && (
         <ThemedCard style={{ marginBottom: '24px', backgroundColor: Colors.primary + '10', borderLeft: `4px solid ${Colors.primary}` }}>
           <ThemedText
@@ -635,7 +911,7 @@ export default function ErrandDetails() {
         </ThemedCard>
       )}
 
-      {/* Runner Defense Section - Show when errand is disputed and user is the runner */}
+      {/* Runner Defense Section */}
       {errand?.assigned_to === user?.id && escrow && escrow.status === 'disputed' && !escrow.runner_defense_at && (
         <ThemedCard style={{ marginBottom: '24px', backgroundColor: '#ef444420', borderLeft: `4px solid #ef4444` }}>
           <ThemedText
@@ -724,10 +1000,9 @@ export default function ErrandDetails() {
             </ThemedText>
 
             <ThemedText style={{ fontSize: '14px', marginBottom: '16px', opacity: 0.7, display: 'block' }}>
-              Explain your side of the story and optionally provide evidence (photos, documents, etc.) to support your position.
+              Explain your side of the story and optionally provide evidence to support your position.
             </ThemedText>
 
-            {/* Defense Details */}
             <div style={{ marginBottom: '16px' }}>
               <label
                 style={{
@@ -762,7 +1037,6 @@ export default function ErrandDetails() {
               />
             </div>
 
-            {/* Image Upload */}
             <div style={{ marginBottom: '20px' }}>
               <label
                 style={{
@@ -834,14 +1108,11 @@ export default function ErrandDetails() {
                 style={{ display: 'none' }}
                 onChange={(e) => {
                   const file = e.target.files?.[0];
-                  if (file) {
-                    setDefenseImage(file);
-                  }
+                  if (file) setDefenseImage(file);
                 }}
               />
             </div>
 
-            {/* Action Buttons */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <Button
                 variant="ghost"
@@ -863,7 +1134,7 @@ export default function ErrandDetails() {
         </div>
       )}
 
-      {/* Review Section - Show after payment is released */}
+      {/* Review Section */}
       {escrow && (escrow.status === 'released' || escrow.status === 'withdrawn') && !escrow.review_submitted && (
         <ThemedCard style={{ marginBottom: '24px' }}>
           <ThemedText

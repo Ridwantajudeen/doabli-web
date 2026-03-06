@@ -7,7 +7,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { ThemedText, ThemedTextInput, ThemedCard } from '../../components/ThemedComponents';
 import Button from '../../components/Button';
-import { FiArrowLeft, FiUser, FiMessageSquare } from 'react-icons/fi';
+import { FiArrowLeft, FiMessageSquare, FiCheck } from 'react-icons/fi';
 
 export default function Chat() {
   const { partnerId } = useParams();
@@ -53,21 +53,27 @@ export default function Chat() {
   // Send message
   const sendMutation = useMutation({
     mutationFn: async (content) => {
-      const { data, error } = await supabase
-        .from('messages')
-        .insert([
-          {
-            sender_id: user.id,
-            receiver_id: partnerId,
-            content,
-            status: 'sent',
-          },
-        ])
-        .select()
-        .single();
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      
+      // Send via backend to trigger notification
+      const response = await fetch(`${apiUrl}/api/messages/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sender_id: user.id,
+          receiver_id: partnerId,
+          content,
+          type: 'text',
+        }),
+      });
 
-      if (error) throw error;
-      return data;
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to send message');
+      }
+
+      const data = await response.json();
+      return data.message;
     },
     onSuccess: () => {
       queryClient.invalidateQueries(['messages', user?.id, partnerId]);
@@ -100,6 +106,7 @@ export default function Chat() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
 
   // Subscribe to new messages
   useEffect(() => {
@@ -176,19 +183,12 @@ export default function Chat() {
           <FiArrowLeft size={24} />
           </button>
 
-          <div
-            style={{
-              width: '48px',
-              height: '48px',
-              borderRadius: '24px',
-              backgroundColor: Colors.primary + '20',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '24px',
-            }}
-          >
-            <FiUser size={32} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <Avatar
+              url={partner?.avatar_url}
+              size={48}
+              kycVerified={partner?.kyc_verified}
+            />
           </div>
 
           <div>
@@ -196,13 +196,20 @@ export default function Chat() {
               title
               style={{ fontSize: '16px', fontWeight: '600', display: 'block' }}
             >
-              {partner ? `${partner.first_name} ${partner.last_name}` : 'Chat'}
+              {partner ? partner.first_name : 'Chat'}
             </ThemedText>
             <ThemedText style={{ fontSize: '12px', opacity: 0.6, display: 'block' }}>
               {partner?.email || 'Loading...'}
             </ThemedText>
           </div>
         </div>
+
+        {partner && partner.kyc_verified && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <FiCheck color={Colors.primary} />
+            <ThemedText style={{ fontSize: '12px', opacity: 0.8 }}>Verified</ThemedText>
+          </div>
+        )}
 
         {partner && (
           <Button
@@ -242,25 +249,43 @@ export default function Chat() {
                   justifyContent: isOwn ? 'flex-end' : 'flex-start',
                 }}
               >
+                {!isOwn && partner && (
+                  <div style={{ marginRight: 8 }}>
+                    <Avatar
+                      url={partner.avatar_url}
+                      size={32}
+                      kycVerified={partner.kyc_verified}
+                    />
+                  </div>
+                )}
+
                 <div
                   style={{
                     maxWidth: '60%',
                     padding: '12px 16px',
                     borderRadius: '12px',
-                    backgroundColor: isOwn ? Colors.primary : theme.uiBackground,
+                    backgroundColor: msg.type === 'price_update' ? Colors.warning + '20' : (isOwn ? Colors.primary : theme.uiBackground),
                     color: isOwn ? 'white' : theme.text,
                   }}
                 >
-                  <ThemedText
-                    style={{
-                      fontSize: '14px',
-                      display: 'block',
-                      marginBottom: '4px',
-                      color: isOwn ? 'white' : theme.text,
-                    }}
-                  >
-                    {msg.content}
-                  </ThemedText>
+                  {msg.type === 'price_update' && (
+                    <div style={{ marginBottom: '8px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <div style={{ backgroundColor: Colors.warning, color: 'white', padding: '4px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: 700 }}>Price Update</div>
+                      <ThemedText style={{ fontSize: '13px', fontWeight: 700 }}>{msg.content}</ThemedText>
+                    </div>
+                  )}
+                  {msg.type !== 'price_update' && (
+                    <ThemedText
+                      style={{
+                        fontSize: '14px',
+                        display: 'block',
+                        marginBottom: '4px',
+                        color: isOwn ? 'white' : theme.text,
+                      }}
+                    >
+                      {msg.content}
+                    </ThemedText>
+                  )}
                   <ThemedText
                     style={{
                       fontSize: '11px',

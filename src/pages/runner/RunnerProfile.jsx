@@ -8,18 +8,25 @@ import { supabase } from '../../lib/supabase';
 import { showError, showSuccess } from '../../lib/notify';
 import { ThemedText, ThemedCard, ThemedTextInput } from '../../components/ThemedComponents';
 import Button from '../../components/Button';
-import { FiEdit, FiX, FiLogOut, FiUser, FiCamera, FiCheckCircle, FiAlertCircle, FiClock, FiDollarSign, FiTrendingUp } from 'react-icons/fi';
+import { FiEdit, FiX, FiLogOut, FiUser, FiCamera, FiCheckCircle, FiAlertCircle, FiClock, FiDollarSign, FiTrendingUp, FiPlus, FiTrash2 } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import KYCVerificationModal from '../../components/KYCVerificationModal';
+import { useQueryClient } from '@tanstack/react-query';
 
 export default function RunnerProfile() {
   const navigate = useNavigate();
   const { theme, Colors } = useTheme();
   const { user, profile, logout } = useAuth();
+  const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showKYCModal, setShowKYCModal] = useState(false);
+
+  // Services management state
+  const [showServicesModal, setShowServicesModal] = useState(false);
+  const [editingServiceId, setEditingServiceId] = useState(null);
+  const [serviceForm, setServiceForm] = useState({ title: '', description: '', price: '' });
 
   // Form fields
   const [bio, setBio] = useState('');
@@ -27,6 +34,9 @@ export default function RunnerProfile() {
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // review list visibility (show latest only initially)
+  const [reviewVisibleCount, setReviewVisibleCount] = useState(1);
 
   // Bank account fields
   const [bankAccountNumber, setBankAccountNumber] = useState('');
@@ -123,20 +133,114 @@ export default function RunnerProfile() {
     },
   });
 
-  // Fetch reviews
+  // Fetch reviews (include job title/price via escrow->errand)
   const { data: reviews = [] } = useQuery({
     queryKey: ['reviews', user?.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('reviews')
-        .select('*')
+        .select(`*, client:client_id(id, first_name, last_name), escrow:escrow_id(id, errand_id)`)
         .eq('runner_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      let revs = data || [];
+
+      // attach errand details
+      const errandIds = revs.map(r => r.escrow?.errand_id).filter(id => id != null);
+      if (errandIds.length) {
+        const { data: errandsData } = await supabase
+          .from('errands')
+          .select('id,title,price')
+          .in('id', errandIds);
+        const map = new Map((errandsData || []).map(e => [e.id, e]));
+        revs = revs.map(r => ({ ...r, errand: map.get(r.escrow?.errand_id) }));
+      }
+
+      return revs;
+    },
+    enabled: !!user,
+  });
+
+  // ✨ Fetch services
+  const { data: services = [], refetch: refetchServices } = useQuery({
+    queryKey: ['services', profile?.id],
+    queryFn: async () => {
+      if (!profile?.id) return [];
+      const { data, error } = await supabase
+        .from('services')
+        .select('*')
+        .eq('runner_id', profile.id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
       return data || [];
     },
-    enabled: !!user,
+    enabled: !!profile?.id,
+  });
+
+  // ✨ Create/Update service mutation
+  const servicesMutation = useMutation({
+    mutationFn: async (serviceData) => {
+      if (editingServiceId) {
+        // Update existing service
+        const { error } = await supabase
+          .from('services')
+          .update({
+            title: serviceData.title.trim(),
+            description: serviceData.description.trim(),
+            price: parseFloat(serviceData.price),
+          })
+          .eq('id', editingServiceId);
+
+        if (error) throw error;
+      } else {
+        // Create new service
+        if (services.length >= 5) {
+          throw new Error('You can only add a maximum of 5 services');
+        }
+
+        const { error } = await supabase
+          .from('services')
+          .insert({
+            runner_id: profile.id,
+            title: serviceData.title.trim(),
+            description: serviceData.description.trim(),
+            price: parseFloat(serviceData.price),
+          });
+
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      showSuccess(editingServiceId ? 'Service updated successfully' : 'Service added successfully');
+      setServiceForm({ title: '', description: '', price: '' });
+      setEditingServiceId(null);
+      setShowServicesModal(false);
+      refetchServices();
+    },
+    onError: (err) => {
+      showError('service', err);
+    },
+  });
+
+  // ✨ Delete service mutation
+  const deleteServiceMutation = useMutation({
+    mutationFn: async (serviceId) => {
+      const { error } = await supabase
+        .from('services')
+        .delete()
+        .eq('id', serviceId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      showSuccess('Service deleted successfully');
+      refetchServices();
+    },
+    onError: (err) => {
+      showError('delete-service', err);
+    },
   });
 
   // Fetch current KYC status
@@ -389,6 +493,46 @@ export default function RunnerProfile() {
     }
   };
 
+  // ✨ Service handlers
+  const handleAddService = () => {
+    setEditingServiceId(null);
+    setServiceForm({ title: '', description: '', price: '' });
+    setShowServicesModal(true);
+  };
+
+  const handleEditService = (service) => {
+    setEditingServiceId(service.id);
+    setServiceForm({
+      title: service.title,
+      description: service.description,
+      price: service.price.toString(),
+    });
+    setShowServicesModal(true);
+  };
+
+  const handleSaveService = () => {
+    if (!serviceForm.title.trim()) {
+      showError('validation', 'Service title is required');
+      return;
+    }
+    if (!serviceForm.description.trim()) {
+      showError('validation', 'Service description is required');
+      return;
+    }
+    if (!serviceForm.price || parseFloat(serviceForm.price) <= 0) {
+      showError('validation', 'Service price must be greater than 0');
+      return;
+    }
+
+    servicesMutation.mutate(serviceForm);
+  };
+
+  const handleDeleteService = (serviceId) => {
+    if (window.confirm('Are you sure you want to delete this service?')) {
+      deleteServiceMutation.mutate(serviceId);
+    }
+  };
+
   // Handle account number change and auto-resolve
   const handleAccountNumberChange = async (value) => {
     setBankAccountNumber(value);
@@ -611,6 +755,110 @@ export default function RunnerProfile() {
         )}
       </div>
 
+      {/* Bio */}
+      <ThemedCard style={{ marginBottom: '20px' }}>
+        <ThemedText
+          title
+          style={{
+            fontSize: '16px',
+            fontWeight: '600',
+            marginBottom: '12px',
+            display: 'block',
+          }}
+        >
+          Bio
+        </ThemedText>
+        {isEditing ? (
+          <textarea
+            value={bio}
+            onChange={(e) => setBio(e.target.value)}
+            placeholder="Tell clients about yourself..."
+            style={{
+              width: '100%',
+              padding: '12px',
+              backgroundColor: theme.uiBackground,
+              border: `1px solid ${theme.uiBackground}`,
+              borderRadius: '8px',
+              color: theme.text,
+              fontFamily: 'inherit',
+              fontSize: '16px',
+              minHeight: '100px',
+              boxSizing: 'border-box',
+              resize: 'vertical',
+            }}
+          />
+        ) : (
+          <ThemedText style={{ fontSize: '14px', lineHeight: '1.6', display: 'block' }}>
+            {bio || 'No bio added yet'}
+          </ThemedText>
+        )}
+      </ThemedCard>
+
+      {/* Location */}
+      <ThemedCard style={{ marginBottom: '20px' }}>
+        <ThemedText
+          title
+          style={{
+            fontSize: '16px',
+            fontWeight: '600',
+            marginBottom: '12px',
+            display: 'block',
+          }}
+        >
+          Location
+        </ThemedText>
+        {isEditing ? (
+          <ThemedTextInput
+            value={address}
+            onChange={(v) => setAddress(v)}
+            placeholder="Your location"
+          />
+        ) : (
+          <ThemedText style={{ fontSize: '14px', display: 'block' }}>
+            {address || 'Not provided'}
+          </ThemedText>
+        )}
+      </ThemedCard>
+
+      {/* Rating, Reviews & Completed Stats */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '20px' }}>
+        <ThemedCard style={{ textAlign: 'center', padding: '16px' }}>
+          <ThemedText style={{ fontSize: '12px', opacity: 0.6, marginBottom: '8px', display: 'block' }}>
+            Rating
+          </ThemedText>
+          <ThemedText
+            title
+            style={{ fontSize: '24px', fontWeight: 'bold', display: 'block' }}
+          >
+            {avgRating?.toFixed(1) || '—'}
+          </ThemedText>
+        </ThemedCard>
+
+        <ThemedCard style={{ textAlign: 'center', padding: '16px' }}>
+          <ThemedText style={{ fontSize: '12px', opacity: 0.6, marginBottom: '8px', display: 'block' }}>
+            Reviews
+          </ThemedText>
+          <ThemedText
+            title
+            style={{ fontSize: '24px', fontWeight: 'bold', display: 'block' }}
+          >
+            {reviews.length}
+          </ThemedText>
+        </ThemedCard>
+
+        <ThemedCard style={{ textAlign: 'center', padding: '16px' }}>
+          <ThemedText style={{ fontSize: '12px', opacity: 0.6, marginBottom: '8px', display: 'block' }}>
+            Completed
+          </ThemedText>
+          <ThemedText
+            title
+            style={{ fontSize: '24px', fontWeight: 'bold', display: 'block' }}
+          >
+            {profile?.completed_errands || 0}
+          </ThemedText>
+        </ThemedCard>
+      </div>
+
       {/* ✅ NEW: Earnings Summary Card */}
       {earningsSummary && (
         <ThemedCard style={{ marginBottom: '20px', background: `linear-gradient(135deg, ${Colors.primary}20 0%, ${Colors.primary}10 100%)`, borderLeft: `4px solid ${Colors.primary}` }}>
@@ -769,6 +1017,109 @@ export default function RunnerProfile() {
               </ThemedText>
             </div>
           </>
+        )}
+      </ThemedCard>
+
+      {/* ✨ Services Management Section */}
+      <ThemedCard style={{ marginBottom: '20px', borderLeft: `4px solid ${Colors.primary}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+          <ThemedText
+            title
+            style={{ fontSize: '16px', fontWeight: '600', display: 'block' }}
+          >
+            Services ({services.length}/5)
+          </ThemedText>
+          {isEditing && services.length < 5 && (
+            <button
+              onClick={handleAddService}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: Colors.primary,
+                fontSize: '18px',
+                padding: '4px',
+              }}
+              aria-label="Add service"
+            >
+              <FiPlus size={20} />
+            </button>
+          )}
+        </div>
+
+        {services.length === 0 ? (
+          <ThemedText style={{ fontSize: '13px', opacity: 0.6, textAlign: 'center', padding: '20px' }}>
+            {isEditing 
+              ? 'No services yet. Click the + button to add services and let clients hire you directly for specific tasks.'
+              : 'No services listed. Ask this runner to add services to their profile.'}
+          </ThemedText>
+        ) : (
+          <div style={{ display: 'grid', gap: '12px' }}>
+            {services.map((service) => (
+              <div
+                key={service.id}
+                style={{
+                  padding: '12px',
+                  backgroundColor: theme.background,
+                  borderRadius: '8px',
+                  borderLeft: `3px solid ${Colors.primary}`,
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: '12px' }}>
+                  <div style={{ flex: 1 }}>
+                    <ThemedText style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px', display: 'block' }}>
+                      {service.title}
+                    </ThemedText>
+                    <ThemedText style={{ fontSize: '13px', opacity: 0.7, marginBottom: '6px', display: 'block' }}>
+                      {service.description}
+                    </ThemedText>
+                    <ThemedText
+                      style={{
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        color: Colors.primary,
+                        display: 'block',
+                      }}
+                    >
+                      ₦{Number(service.price).toLocaleString()}
+                    </ThemedText>
+                  </div>
+                  {isEditing && (
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={() => handleEditService(service)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: Colors.primary,
+                        fontSize: '14px',
+                        padding: '4px',
+                      }}
+                      aria-label="Edit service"
+                    >
+                      <FiEdit size={16} />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteService(service.id)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: Colors.error,
+                        fontSize: '14px',
+                        padding: '4px',
+                      }}
+                      aria-label="Delete service"
+                    >
+                      <FiTrash2 size={16} />
+                    </button>
+                  </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </ThemedCard>
 
@@ -1203,75 +1554,6 @@ export default function RunnerProfile() {
       </ThemedCard>
       )}
 
-      {/* Performance Stats */}
-      {profile && (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr 1fr',
-            gap: '12px',
-            marginBottom: '24px',
-          }}
-        >
-          <ThemedCard style={{ textAlign: 'center', padding: '16px' }}>
-            <ThemedText
-              style={{
-                fontSize: '12px',
-                opacity: 0.6,
-                marginBottom: '8px',
-                display: 'block',
-              }}
-            >
-              Rating
-            </ThemedText>
-            <ThemedText
-              title
-              style={{ fontSize: '24px', fontWeight: 'bold', display: 'block' }}
-            >
-              {avgRating.toFixed(1)}
-            </ThemedText>
-          </ThemedCard>
-
-          <ThemedCard style={{ textAlign: 'center', padding: '16px' }}>
-            <ThemedText
-              style={{
-                fontSize: '12px',
-                opacity: 0.6,
-                marginBottom: '8px',
-                display: 'block',
-              }}
-            >
-              Reviews
-            </ThemedText>
-            <ThemedText
-              title
-              style={{ fontSize: '24px', fontWeight: 'bold', display: 'block' }}
-            >
-              {reviews.length}
-            </ThemedText>
-          </ThemedCard>
-
-          <ThemedCard style={{ textAlign: 'center', padding: '16px' }}>
-            <ThemedText
-              style={{
-                fontSize: '12px',
-                opacity: 0.6,
-                marginBottom: '8px',
-                display: 'block',
-              }}
-            >
-              Completed
-            </ThemedText>
-            <ThemedText
-              title
-              style={{ fontSize: '24px', fontWeight: 'bold', display: 'block' }}
-            >
-              {profile.completed_errands || 0}
-            </ThemedText>
-          </ThemedCard>
-        </div>
-      )}
-
       {/* ✅ NEW: Withdrawal History */}
       {withdrawalHistory.length > 0 && (
         <ThemedCard style={{ marginBottom: '20px' }}>
@@ -1311,71 +1593,6 @@ export default function RunnerProfile() {
         </ThemedCard>
       )}
 
-      {/* Bio - Editable */}
-      <ThemedCard style={{ marginBottom: '20px' }}>
-        <ThemedText
-          title
-          style={{
-            fontSize: '16px',
-            fontWeight: '600',
-            marginBottom: '12px',
-            display: 'block',
-          }}
-        >
-          Bio
-        </ThemedText>
-        {isEditing ? (
-          <textarea
-            value={bio}
-            onChange={(e) => setBio(e.target.value)}
-            placeholder="Tell clients about yourself..."
-            style={{
-              width: '100%',
-              padding: '12px',
-              backgroundColor: theme.uiBackground,
-              border: `1px solid ${theme.uiBackground}`,
-              borderRadius: '8px',
-              color: theme.text,
-              fontFamily: 'inherit',
-              fontSize: '16px',
-              minHeight: '100px',
-              boxSizing: 'border-box',
-              resize: 'vertical',
-            }}
-          />
-        ) : (
-          <ThemedText style={{ fontSize: '14px', lineHeight: '1.6', display: 'block' }}>
-            {bio || 'No bio added yet'}
-          </ThemedText>
-        )}
-      </ThemedCard>
-
-      {/* Address - Editable */}
-      <ThemedCard style={{ marginBottom: '20px' }}>
-        <ThemedText
-          title
-          style={{
-            fontSize: '16px',
-            fontWeight: '600',
-            marginBottom: '12px',
-            display: 'block',
-          }}
-        >
-          Address
-        </ThemedText>
-        {isEditing ? (
-          <ThemedTextInput
-            value={address}
-            onChange={(v) => setAddress(v)}
-            placeholder="Your address"
-          />
-        ) : (
-          <ThemedText style={{ fontSize: '14px', display: 'block' }}>
-            {address || 'Not provided'}
-          </ThemedText>
-        )}
-      </ThemedCard>
-
       {/* Reviews */}
       {reviews.length > 0 && (
         <ThemedCard style={{ marginBottom: '20px' }}>
@@ -1391,40 +1608,58 @@ export default function RunnerProfile() {
             Reviews ({reviews.length})
           </ThemedText>
 
-          <div style={{ display: 'grid', gap: '12px' }}>
-            {reviews.map((review) => (
-              <div
-                key={review.id}
-                style={{
-                  padding: '12px',
-                  backgroundColor: theme.background,
-                  borderRadius: '8px',
-                }}
-              >
+          <>
+            <div style={{ display: 'grid', gap: '12px' }}>
+              {reviews.slice(0, reviewVisibleCount).map((review) => (
                 <div
+                  key={review.id}
                   style={{
-                    display: 'flex',
-                    gap: '4px',
-                    marginBottom: '6px',
+                    padding: '12px',
+                    backgroundColor: theme.background,
+                    borderRadius: '8px',
                   }}
                 >
-                  {[...Array(5)].map((_, i) => (
-                    <span key={i} style={{ color: '#f59e0b' }}>
-                      {i < review.rating ? '⭐' : '☆'}
-                    </span>
-                  ))}
-                </div>
-                {review.comment && (
-                  <ThemedText style={{ fontSize: '13px', marginBottom: '4px', display: 'block' }}>
-                    {review.comment}
+                  {review.errand && (
+                    <ThemedText style={{ fontSize: '13px', fontWeight: '600', marginBottom: '6px' }}>
+                      Job: {review.errand.title} • ₦{Number(review.errand.price).toLocaleString()}
+                    </ThemedText>
+                  )}
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: '4px',
+                      marginBottom: '6px',
+                    }}
+                  >
+                    {[...Array(5)].map((_, i) => (
+                      <span key={i} style={{ color: '#f59e0b' }}>
+                        {i < review.rating ? '⭐' : '☆'}
+                      </span>
+                    ))}
+                  </div>
+                  {review.comment && (
+                    <ThemedText style={{ fontSize: '13px', marginBottom: '4px', display: 'block' }}>
+                      {review.comment}
+                    </ThemedText>
+                  )}
+                  <ThemedText style={{ fontSize: '11px', opacity: 0.5, display: 'block' }}>
+                    {new Date(review.created_at).toLocaleDateString()}
                   </ThemedText>
-                )}
-                <ThemedText style={{ fontSize: '11px', opacity: 0.5, display: 'block' }}>
-                  {new Date(review.created_at).toLocaleDateString()}
-                </ThemedText>
+                </div>
+              ))}
+            </div>
+            {reviewVisibleCount < reviews.length && (
+              <div style={{ textAlign: 'center', marginTop: '12px' }}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setReviewVisibleCount((p) => Math.min(reviews.length, p + 3))}
+                >
+                  Show more
+                </Button>
               </div>
-            ))}
-          </div>
+            )}
+          </>
         </ThemedCard>
       )}
 
@@ -1451,6 +1686,158 @@ export default function RunnerProfile() {
           Back to Jobs
         </Button>
       </div>
+
+      {/* ✨ Services Modal */}
+      {showServicesModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: Colors.warning + '33',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+          onClick={() => !servicesMutation.isPending && setShowServicesModal(false)}
+        >
+          <ThemedCard
+            style={{
+              padding: '24px',
+              maxWidth: '400px',
+              width: '90%',
+              borderRadius: '12px',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <ThemedText
+                title
+                style={{
+                  fontSize: '18px',
+                  fontWeight: '700',
+                  display: 'block',
+                }}
+              >
+                {editingServiceId ? 'Edit Service' : 'Add Service'}
+              </ThemedText>
+              <button
+                onClick={() => !servicesMutation.isPending && setShowServicesModal(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '20px',
+                  padding: 0,
+                }}
+                disabled={servicesMutation.isPending}
+              >
+                <FiX />
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gap: '16px' }}>
+              <div>
+                <ThemedText
+                  style={{
+                    fontSize: '12px',
+                    opacity: 0.6,
+                    marginBottom: '6px',
+                    display: 'block',
+                    fontWeight: '500',
+                  }}
+                >
+                  Service Title *
+                </ThemedText>
+                <ThemedTextInput
+                  placeholder="e.g., House Cleaning"
+                  value={serviceForm.title}
+                  onChange={(value) => setServiceForm({ ...serviceForm, title: value })}
+                  style={{ width: '100%' }}
+                />
+              </div>
+
+              <div>
+                <ThemedText
+                  style={{
+                    fontSize: '12px',
+                    opacity: 0.6,
+                    marginBottom: '6px',
+                    display: 'block',
+                    fontWeight: '500',
+                  }}
+                >
+                  Description *
+                </ThemedText>
+                <textarea
+                  placeholder="Describe what this service includes"
+                  value={serviceForm.description}
+                  onChange={(e) => setServiceForm({ ...serviceForm, description: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    border: `1px solid ${Colors.muted}`,
+                    backgroundColor: theme.background,
+                    color: theme.text,
+                    fontFamily: 'inherit',
+                    fontSize: '14px',
+                    minHeight: '80px',
+                    resize: 'vertical',
+                  }}
+                />
+              </div>
+
+              <div>
+                <ThemedText
+                  style={{
+                    fontSize: '12px',
+                    opacity: 0.6,
+                    marginBottom: '6px',
+                    display: 'block',
+                    fontWeight: '500',
+                  }}
+                >
+                  Price (₦) *
+                </ThemedText>
+                <ThemedTextInput
+                  placeholder="e.g., 5000"
+                  value={serviceForm.price}
+                  onChange={(value) => setServiceForm({ ...serviceForm, price: value })}
+                  type="number"
+                  min="1"
+                  step="100"
+                  style={{ width: '100%' }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gap: '12px', gridTemplateColumns: '1fr 1fr', marginTop: '20px' }}>
+              <Button
+                variant="secondary"
+                size="md"
+                onClick={() => setShowServicesModal(false)}
+                disabled={servicesMutation.isPending}
+                style={{ width: '100%' }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="md"
+                onClick={handleSaveService}
+                disabled={servicesMutation.isPending}
+                style={{ width: '100%' }}
+              >
+                {servicesMutation.isPending ? 'Saving...' : 'Save Service'}
+              </Button>
+            </div>
+          </ThemedCard>
+        </div>
+      )}
 
       {/* Logout Modal */}
       {showLogoutModal && (
