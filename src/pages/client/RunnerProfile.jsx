@@ -9,6 +9,7 @@ import Button from '../../components/Button';
 import { FiEdit, FiX, FiLogOut, FiUser, FiCamera, FiArrowLeft, FiStar, FiCheck } from 'react-icons/fi';
 import Avatar from '../../components/Avatar';
 import { useState, useEffect } from 'react';
+import { fetchMessagingAccess } from '../../lib/contactAccess';
 
 export default function RunnerProfile() {
   const { id: runnerId } = useParams();
@@ -60,6 +61,14 @@ export default function RunnerProfile() {
     },
   });
 
+  const { data: messagingAccess } = useQuery({
+    queryKey: ['message-access', user?.id, runnerId],
+    queryFn: async () => fetchMessagingAccess(supabase, user?.id, runnerId),
+    enabled: !!user?.id && !!runnerId,
+  });
+
+  const canMessage = !!messagingAccess?.canMessage;
+
   // review visibility state (only show first, load more on demand)
   const [visibleCount, setVisibleCount] = useState(1);
 
@@ -87,10 +96,16 @@ export default function RunnerProfile() {
   const acceptMutation = useMutation({
     mutationFn: async () => {
       const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('Authentication required');
 
       const res = await fetch(`${apiBase}/api/errands/application/${applicationId}/accept`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           errand_id: errandId,
           runner_id: runnerId,
@@ -126,10 +141,16 @@ export default function RunnerProfile() {
   const directHireMutation = useMutation({
     mutationFn: async () => {
       const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('Authentication required');
 
       const res = await fetch(`${apiBase}/api/errands/direct-hire`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           client_id: user.id,
           runner_id: runnerId,
@@ -257,57 +278,7 @@ export default function RunnerProfile() {
         )}
       </div>
 
-      {/* Contact Info */}
-      <ThemedCard style={{ marginBottom: '24px' }}>
-        <ThemedText
-          title
-          style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px', display: 'block' }}
-        >
-          Contact Information
-        </ThemedText>
-
-        <div style={{ marginBottom: '12px' }}>
-          <ThemedText style={{ fontSize: '12px', opacity: 0.6, marginBottom: '4px', display: 'block' }}>
-            Email
-          </ThemedText>
-          <ThemedText style={{ fontSize: '14px', display: 'block' }}>{runner.email}</ThemedText>
-        </div>
-
-        <div
-          style={{
-            height: '1px',
-            backgroundColor: theme.uiBackground,
-            margin: '12px 0',
-          }}
-        />
-
-        <div>
-          <ThemedText style={{ fontSize: '12px', opacity: 0.6, marginBottom: '4px', display: 'block' }}>
-            Phone
-          </ThemedText>
-          <ThemedText style={{ fontSize: '14px', display: 'block' }}>
-            {runner.phone_number || 'Not provided'}
-          </ThemedText>
-        </div>
-
-        {runner.address && (
-          <>
-            <div
-              style={{
-                height: '1px',
-                backgroundColor: theme.uiBackground,
-                margin: '12px 0',
-              }}
-            />
-            <div>
-              <ThemedText style={{ fontSize: '12px', opacity: 0.6, marginBottom: '4px', display: 'block' }}>
-                Address
-              </ThemedText>
-              <ThemedText style={{ fontSize: '14px', display: 'block' }}>{runner.address}</ThemedText>
-            </div>
-          </>
-        )}
-      </ThemedCard>
+      {/* Contact details are intentionally hidden on profile view */}
 
       {/* Bio */}
       {runner.bio && (
@@ -410,7 +381,8 @@ export default function RunnerProfile() {
       <div style={{ display: 'grid', gap: '12px' }}>
         <Button
           variant="primary"
-          onClick={() => navigate(`/client/chat/${runner.id}`)}
+          onClick={() => canMessage && navigate(`/client/chat/${runner.id}`)}
+          disabled={!canMessage}
           style={{ width: '100%' }}
         >
           Contact Runner

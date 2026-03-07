@@ -11,6 +11,7 @@ import { ThemedView, ThemedText, ThemedCard } from '../../components/ThemedCompo
 import Button from '../../components/Button';
 import { FiClock, FiUser, FiCheck, FiX, FiMapPin, FiStar, FiArrowLeft, FiAlertTriangle, FiCamera } from 'react-icons/fi';
 import Avatar from '../../components/Avatar';
+import { fetchMessagingAccess, fetchViewerContactAccess, updateOwnerContactShare } from '../../lib/contactAccess';
 
 // ✅ CHANGE 1: Added 'offered' and 'pending_funding' so the badge shows correct labels
 const STATUS_CONFIG = {
@@ -95,6 +96,51 @@ export default function ErrandDetails() {
     enabled: !!errand?.assigned_to,
   });
 
+  const { data: messagingAccess } = useQuery({
+    queryKey: ['message-access', user?.id, runner?.id],
+    queryFn: async () => fetchMessagingAccess(supabase, user?.id, runner?.id),
+    enabled: !!user?.id && !!runner?.id,
+  });
+
+  const { data: clientShareToRunner, refetch: refetchClientShare } = useQuery({
+    queryKey: ['contact-share-client-to-runner', user?.id, runner?.id, id],
+    queryFn: async () => fetchViewerContactAccess(user?.id, runner?.id, id),
+    enabled: !!runner?.id && !!user?.id && !!id,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchInterval: 5000,
+  });
+
+  const { data: runnerShareToClient } = useQuery({
+    queryKey: ['contact-share-runner-to-client', runner?.id, user?.id, id],
+    queryFn: async () => fetchViewerContactAccess(runner?.id, user?.id, id),
+    enabled: !!runner?.id && !!user?.id && !!id,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchInterval: 5000,
+  });
+
+  const shareContactMutation = useMutation({
+    mutationFn: async ({ shareEmail, sharePhone }) =>
+      updateOwnerContactShare({
+        ownerId: user?.id,
+        viewerId: runner?.id,
+        errandId: id,
+        shareEmail,
+        sharePhone,
+      }),
+    onSuccess: async () => {
+      await refetchClientShare();
+      showSuccess('Contact sharing updated.');
+    },
+    onError: (err) => showError('contact-sharing', err),
+  });
+
+  const canOwnerManageShare = !!clientShareToRunner?.can_owner_manage;
+  const canViewRunnerEmail = !!runnerShareToClient?.can_view_email;
+  const canViewRunnerPhone = !!runnerShareToClient?.can_view_phone;
+  const canMessage = !!messagingAccess?.canMessage;
+
   // Fetch applications if not assigned
   const { data: applications = [] } = useQuery({
     queryKey: ['applications', id],
@@ -145,12 +191,13 @@ export default function ErrandDetails() {
   const confirmMutation = useMutation({
     mutationFn: async () => {
       const apiUrl = import.meta.env.VITE_API_URL || '';
-      const token = (await supabase.auth.getSession()).data.session?.access_token || '';
+      const token = (await supabase.auth.getSession()).data.session?.access_token;
+      if (!token) throw new Error('Authentication required');
       const response = await fetch(`${apiUrl}/api/escrow/confirm`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: token ? `Bearer ${token}` : undefined,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ escrow_id: escrow.id, user_id: profile?.id || user.id }),
       });
@@ -186,11 +233,13 @@ export default function ErrandDetails() {
       }
 
       const apiUrl = import.meta.env.VITE_API_URL || '';
+      const token = (await supabase.auth.getSession()).data.session?.access_token;
+      if (!token) throw new Error('Authentication required');
       const response = await fetch(`${apiUrl}/api/escrow/raise-dispute`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token || ''}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           escrow_id: escrow.id,
@@ -233,15 +282,17 @@ export default function ErrandDetails() {
       }
 
       const apiUrl = import.meta.env.VITE_API_URL || '';
+      const token = (await supabase.auth.getSession()).data.session?.access_token;
+      if (!token) throw new Error('Authentication required');
       const response = await fetch(`${apiUrl}/api/escrow/defend-dispute`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token || ''}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           escrow_id: escrow.id,
-          runner_id: runner?.id,
+          user_id: profile?.id || user.id,
           defense_details: defenseDetails,
           image_base64: imageBase64,
         }),
@@ -336,6 +387,8 @@ export default function ErrandDetails() {
   const counterofferMutation = useMutation({
     mutationFn: async () => {
       const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const token = (await supabase.auth.getSession()).data.session?.access_token;
+      if (!token) throw new Error('Authentication required');
       const price = Number(counterofferPrice);
 
       if (!price || price <= 0) {
@@ -344,7 +397,10 @@ export default function ErrandDetails() {
 
       const res = await fetch(`${apiBase}/api/errands/${id}/propose-price`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           user_id: profile?.id || user.id,
           proposed_price: price,
@@ -644,12 +700,19 @@ export default function ErrandDetails() {
               >
                 {runner.first_name} {runner.last_name}
               </ThemedText>
-              <ThemedText style={{ fontSize: '14px', opacity: 0.7, display: 'block', marginBottom: '4px' }}>
-                {runner.email}
-              </ThemedText>
-              {runner.phone_number && (
+              {canViewRunnerEmail && (
+                <ThemedText style={{ fontSize: '14px', opacity: 0.7, display: 'block', marginBottom: '4px' }}>
+                  {runner.email}
+                </ThemedText>
+              )}
+              {canViewRunnerPhone && (
                 <ThemedText style={{ fontSize: '14px', opacity: 0.7, display: 'block' }}>
-                  {runner.phone_number}
+                  {runner.phone_number || 'Not provided'}
+                </ThemedText>
+              )}
+              {!canViewRunnerEmail && !canViewRunnerPhone && (
+                <ThemedText style={{ fontSize: '12px', opacity: 0.6, display: 'block' }}>
+                  Runner has not shared contact details yet.
                 </ThemedText>
               )}
             </div>
@@ -1208,10 +1271,50 @@ export default function ErrandDetails() {
 
       {/* Actions */}
       <div style={{ display: 'grid', gap: '12px' }}>
+        {runner && canOwnerManageShare && (
+          <ThemedCard>
+            <ThemedText style={{ fontSize: '13px', fontWeight: '600', marginBottom: '8px', display: 'block' }}>
+              Your contact sharing for this runner
+            </ThemedText>
+            <div style={{ display: 'grid', gap: '8px' }}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  shareContactMutation.mutate({
+                    shareEmail: !clientShareToRunner?.can_view_email,
+                    sharePhone: !!clientShareToRunner?.can_view_phone,
+                  })
+                }
+                disabled={shareContactMutation.isPending}
+              >
+                {clientShareToRunner?.can_view_email ? 'Hide my email from runner' : 'Reveal my email to runner'}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  shareContactMutation.mutate({
+                    shareEmail: !!clientShareToRunner?.can_view_email,
+                    sharePhone: !clientShareToRunner?.can_view_phone,
+                  })
+                }
+                disabled={shareContactMutation.isPending}
+              >
+                {clientShareToRunner?.can_view_phone ? 'Hide my phone from runner' : 'Reveal my phone to runner'}
+              </Button>
+              <ThemedText style={{ fontSize: '12px', opacity: 0.7, display: 'block' }}>
+                Keep communication inside Errandly for security and dispute support.
+              </ThemedText>
+            </div>
+          </ThemedCard>
+        )}
+
         {runner && (
           <Button
             variant="primary"
-            onClick={() => navigate(`/client/chat/${runner.user_id}`)}
+            onClick={() => canMessage && navigate(`/client/chat/${runner.id}`)}
+            disabled={!canMessage}
             style={{ width: '100%' }}
           >
             Contact Runner

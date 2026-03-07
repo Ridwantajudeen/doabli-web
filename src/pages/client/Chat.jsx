@@ -9,6 +9,7 @@ import { ThemedText, ThemedTextInput, ThemedCard } from '../../components/Themed
 import Button from '../../components/Button';
 import Avatar from '../../components/Avatar';
 import { FiArrowLeft, FiMessageSquare, FiCheck } from 'react-icons/fi';
+import { fetchMessagingAccess } from '../../lib/contactAccess';
 
 export default function Chat() {
   const { partnerId } = useParams();
@@ -18,6 +19,14 @@ export default function Chat() {
   const { user } = useAuth();
   const [messageText, setMessageText] = useState('');
   const messagesEndRef = useRef(null);
+
+  const { data: contactAccess } = useQuery({
+    queryKey: ['contact-access', user?.id, partnerId],
+    queryFn: async () => fetchMessagingAccess(supabase, user?.id, partnerId),
+    enabled: !!user?.id && !!partnerId,
+  });
+
+  const canMessage = !!contactAccess?.canMessage;
 
   // Fetch messages
   const { data: messages = [], isLoading } = useQuery({
@@ -58,14 +67,23 @@ export default function Chat() {
   // Send message
   const sendMutation = useMutation({
     mutationFn: async (content) => {
+      if (!canMessage) {
+        throw new Error('Messaging is disabled because there is no active or direct-hire job with this user.');
+      }
+
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('Authentication required');
       
       // Send via backend to trigger notification
       const response = await fetch(`${apiUrl}/api/messages/send`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
-          sender_id: user.id,
           receiver_id: partnerId,
           content,
           type: 'text',
@@ -96,12 +114,17 @@ export default function Chat() {
 
       try {
         const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (!token) return;
         
         const response = await fetch(`${apiUrl}/api/messages/mark-as-read`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
           body: JSON.stringify({
-            receiver_id: user.id,
             sender_id: partnerId,
           }),
         });
@@ -215,7 +238,7 @@ export default function Chat() {
               {partner ? partner.first_name : 'Chat'}
             </ThemedText>
             <ThemedText style={{ fontSize: '12px', opacity: 0.6, display: 'block' }}>
-              {partner?.email || 'Loading...'}
+              Keep communication inside Errandly
             </ThemedText>
           </div>
         </div>
@@ -327,11 +350,22 @@ export default function Chat() {
         onSubmit={handleSendMessage}
         style={{
           display: 'flex',
+          flexWrap: 'wrap',
           gap: '12px',
           padding: '16px 20px',
           borderTop: `1px solid ${theme.uiBackground}`,
         }}
       >
+        {!canMessage && (
+          <div style={{ width: '100%', marginBottom: '8px' }}>
+            <ThemedText style={{ fontSize: '12px', color: '#ef4444', display: 'block' }}>
+              Messaging is available only while you have an active, incomplete, or direct-hire job together.
+            </ThemedText>
+            <ThemedText style={{ fontSize: '12px', opacity: 0.7, display: 'block' }}>
+              For security and dispute support, keep all communication inside Errandly.
+            </ThemedText>
+          </div>
+        )}
         <textarea
           value={messageText}
           onChange={(e) => setMessageText(e.target.value)}
@@ -356,11 +390,12 @@ export default function Chat() {
             boxSizing: 'border-box',
           }}
           rows="1"
+          disabled={!canMessage}
         />
         <Button
           variant="primary"
           onClick={handleSendMessage}
-          disabled={!messageText.trim() || sendMutation.isPending}
+          disabled={!canMessage || !messageText.trim() || sendMutation.isPending}
           style={{ whiteSpace: 'nowrap' }}
         >
           {sendMutation.isPending ? '...' : 'Send'}

@@ -1,6 +1,6 @@
 //RunnerNotifications.jsx
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
@@ -30,6 +30,7 @@ export default function RunnerNotifications() {
   const { Colors } = useTheme();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const notificationQueryKey = useMemo(() => ['runner-notifications', user?.id], [user?.id]);
 
   const [defendingDispute, setDefendingDispute] = useState(null);
   const [defenseDetails, setDefenseDetails] = useState('');
@@ -37,7 +38,7 @@ export default function RunnerNotifications() {
   const [defenseImageBase64, setDefenseImageBase64] = useState(null);
 
   const { data: notifications = [], isLoading } = useQuery({
-    queryKey: ['runner-notifications', user?.id],
+    queryKey: notificationQueryKey,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('notifications')
@@ -56,6 +57,10 @@ export default function RunnerNotifications() {
       return data || [];
     },
     enabled: !!user?.id,
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    refetchInterval: 15000,
   });
 
   // Real-time subscription
@@ -69,21 +74,30 @@ export default function RunnerNotifications() {
         schema: 'public',
         table: 'notifications',
         filter: `user_id=eq.${user.id}`,
-      }, () => {
-        queryClient.invalidateQueries({ queryKey: ['runner-notifications', user.id] });
+      }, (payload) => {
+        const inserted = payload.new;
+        queryClient.setQueryData(notificationQueryKey, (old = []) => {
+          if (old.some((n) => n.id === inserted.id)) return old;
+          return [inserted, ...old];
+        });
+        queryClient.invalidateQueries({ queryKey: ['runner-unread-count', user.id] });
       })
       .on('postgres_changes', {
         event: 'UPDATE',
         schema: 'public',
         table: 'notifications',
         filter: `user_id=eq.${user.id}`,
-      }, () => {
-        queryClient.invalidateQueries({ queryKey: ['runner-notifications', user.id] });
+      }, (payload) => {
+        const updated = payload.new;
+        queryClient.setQueryData(notificationQueryKey, (old = []) =>
+          old.map((n) => (n.id === updated.id ? { ...n, ...updated } : n))
+        );
+        queryClient.invalidateQueries({ queryKey: ['runner-unread-count', user.id] });
       })
       .subscribe();
 
     return () => supabase.removeChannel(channel);
-  }, [user?.id, queryClient]);
+  }, [user?.id, queryClient, notificationQueryKey]);
 
   const markAsReadMutation = useMutation({
     mutationFn: async (notificationId) => {
@@ -95,9 +109,10 @@ export default function RunnerNotifications() {
       return notificationId;
     },
     onSuccess: (notificationId) => {
-      queryClient.setQueryData(['runner-notifications', user.id], (old) =>
+      queryClient.setQueryData(notificationQueryKey, (old) =>
         old ? old.map((n) => n.id === notificationId ? { ...n, read: true } : n) : old
       );
+      queryClient.invalidateQueries({ queryKey: ['runner-unread-count', user.id] });
     },
   });
 
@@ -111,18 +126,25 @@ export default function RunnerNotifications() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.setQueryData(['runner-notifications', user.id], (old) =>
+      queryClient.setQueryData(notificationQueryKey, (old) =>
         old ? old.map((n) => ({ ...n, read: true })) : old
       );
+      queryClient.invalidateQueries({ queryKey: ['runner-unread-count', user.id] });
     },
   });
 
   const submitDefenseMutation = useMutation({
     mutationFn: async ({ escrowId }) => {
       const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('Authentication required');
       const response = await fetch(`${apiBase}/api/escrow/defend-dispute`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           escrow_id: escrowId,
           user_id: user.id,
@@ -137,7 +159,7 @@ export default function RunnerNotifications() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['runner-notifications', user?.id] });
+      queryClient.invalidateQueries({ queryKey: notificationQueryKey });
       setDefendingDispute(null);
       setDefenseDetails('');
       setDefenseImage(null);

@@ -39,10 +39,16 @@ export default function RunnerApplications() {
   const respondToHireMutation = useMutation({
     mutationFn: async ({ errandId, action }) => {
       const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('Authentication required');
 
       const res = await fetch(`${apiBase}/api/errands/direct-hire/${errandId}/respond`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           runner_id: profile.id,
           action, // 'accept' or 'reject'
@@ -69,9 +75,15 @@ export default function RunnerApplications() {
   const proposePriceMutation = useMutation({
     mutationFn: async ({ errandId, proposed_price, note, receiver_id }) => {
       const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('Authentication required');
       const res = await fetch(`${apiBase}/api/errands/${errandId}/propose-price`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({ user_id: profile.id, proposed_price, note, receiver_id }),
       });
       if (!res.ok) {
@@ -91,9 +103,15 @@ export default function RunnerApplications() {
   const acceptOfferMutation = useMutation({
     mutationFn: async ({ errandId }) => {
       const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('Authentication required');
       const res = await fetch(`${apiBase}/api/errands/${errandId}/accept-offer`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({ runner_id: profile.id }),
       });
       if (!res.ok) {

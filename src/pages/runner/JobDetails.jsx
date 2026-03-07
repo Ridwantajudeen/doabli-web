@@ -9,6 +9,7 @@ import { useAuth } from '../../context/AuthContext';
 import { ThemedText, ThemedCard } from '../../components/ThemedComponents';
 import Button from '../../components/Button';
 import { FiArrowLeft, FiMapPin, FiClock, FiCheck, FiAlertTriangle, FiX, FiCamera, FiDollarSign, FiUser } from 'react-icons/fi';
+import { fetchViewerContactAccess, updateOwnerContactShare } from '../../lib/contactAccess';
 
 export default function JobDetails() {
   const { id } = useParams();
@@ -82,6 +83,44 @@ export default function JobDetails() {
     enabled: !!job?.posted_by,
   });
 
+  const { data: clientShareToRunner } = useQuery({
+    queryKey: ['contact-share-client-to-runner', client?.id, user?.id, id],
+    queryFn: async () => fetchViewerContactAccess(client?.id, user?.id, id),
+    enabled: !!user?.id && !!client?.id,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchInterval: 5000,
+  });
+
+  const { data: runnerShareToClient, refetch: refetchRunnerShare } = useQuery({
+    queryKey: ['contact-share-runner-to-client', user?.id, client?.id, id],
+    queryFn: async () => fetchViewerContactAccess(user?.id, client?.id, id),
+    enabled: !!user?.id && !!client?.id && !!id,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchInterval: 5000,
+  });
+
+  const shareContactMutation = useMutation({
+    mutationFn: async ({ shareEmail, sharePhone }) =>
+      updateOwnerContactShare({
+        ownerId: user?.id,
+        viewerId: client?.id,
+        errandId: id,
+        shareEmail,
+        sharePhone,
+      }),
+    onSuccess: async () => {
+      await refetchRunnerShare();
+      showSuccess('Contact sharing updated.');
+    },
+    onError: (err) => showError('contact-sharing', err),
+  });
+
+  const canOwnerManageShare = !!runnerShareToClient?.can_owner_manage;
+  const canViewClientEmail = !!clientShareToRunner?.can_view_email;
+  const canViewClientPhone = !!clientShareToRunner?.can_view_phone;
+
   // ✅ NEW: Fetch runner's bank account details
   const { data: bankAccount } = useQuery({
     queryKey: ['runner-bank-account', user?.id],
@@ -125,10 +164,16 @@ export default function JobDetails() {
   const applyMutation = useMutation({
     mutationFn: async () => {
       const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('Authentication required');
       
       const res = await fetch(`${apiBase}/api/errands/apply`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           errand_id: id,
           runner_id: profile.id,
@@ -156,6 +201,9 @@ export default function JobDetails() {
   const markDoneMutation = useMutation({
     mutationFn: async () => {
       const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('Authentication required');
 
       let completionImageBase64 = null;
       if (completionImage) {
@@ -169,7 +217,10 @@ export default function JobDetails() {
 
      const res = await fetch(`${apiBase}/api/escrow/mark-done`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           escrow_id: job?.escrow_id,
           user_id: user?.id,
@@ -206,11 +257,17 @@ export default function JobDetails() {
   const withdrawalMutation = useMutation({
     mutationFn: async () => {
       const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('Authentication required');
 
       // ✅ Send profile_id and user_id for proper identification
       const res = await fetch(`${apiBase}/api/withdrawals`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           escrow_id: job?.escrow_id,
           profile_id: profile?.id,
@@ -433,9 +490,15 @@ export default function JobDetails() {
                   if (!window.confirm('Decline this errand offer?')) return;
                   try {
                     const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+                    const { data: { session } } = await supabase.auth.getSession();
+                    const token = session?.access_token;
+                    if (!token) throw new Error('Authentication required');
                     const res = await fetch(`${apiBase}/api/errands/direct-hire/${job.id}/respond`, {
                       method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
+                      headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`,
+                      },
                       body: JSON.stringify({ runner_id: profile.id, action: 'reject' }),
                     });
                     if (!res.ok) {
@@ -461,9 +524,15 @@ export default function JobDetails() {
                   const note = window.prompt('Add an optional note for this counteroffer (or leave blank)') || '';
                   try {
                     const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+                    const { data: { session } } = await supabase.auth.getSession();
+                    const token = session?.access_token;
+                    if (!token) throw new Error('Authentication required');
                     const res = await fetch(`${apiBase}/api/errands/${job.id}/propose-price`, {
                       method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
+                      headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`,
+                      },
                       body: JSON.stringify({ user_id: profile.id, proposed_price: Number(proposed), note, receiver_id: job.posted_by }),
                     });
                     if (!res.ok) {
@@ -486,9 +555,15 @@ export default function JobDetails() {
                   if (!window.confirm('Accept this offer? Client will need to fund before assignment.')) return;
                   try {
                     const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+                    const { data: { session } } = await supabase.auth.getSession();
+                    const token = session?.access_token;
+                    if (!token) throw new Error('Authentication required');
                     const res = await fetch(`${apiBase}/api/errands/${job.id}/accept-offer`, {
                       method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
+                      headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`,
+                      },
                       body: JSON.stringify({ runner_id: profile.id }),
                     });
                     if (!res.ok) {
@@ -556,15 +631,61 @@ export default function JobDetails() {
               >
                 {client.first_name} {client.last_name}
               </ThemedText>
-              <ThemedText style={{ fontSize: '13px', opacity: 0.7, display: 'block' }}>
-                {client.email}
-              </ThemedText>
-              {client.phone_number && (
+              {canViewClientEmail && (
                 <ThemedText style={{ fontSize: '13px', opacity: 0.7, display: 'block' }}>
-                  {client.phone_number}
+                  {client.email}
+                </ThemedText>
+              )}
+              {canViewClientPhone && (
+                <ThemedText style={{ fontSize: '13px', opacity: 0.7, display: 'block' }}>
+                  {client.phone_number || 'Not provided'}
+                </ThemedText>
+              )}
+              {!canViewClientEmail && !canViewClientPhone && (
+                <ThemedText style={{ fontSize: '12px', opacity: 0.6, display: 'block' }}>
+                  Client has not shared contact details yet.
                 </ThemedText>
               )}
             </div>
+          </div>
+        </ThemedCard>
+      )}
+
+      {client && canOwnerManageShare && (
+        <ThemedCard style={{ marginBottom: '24px' }}>
+          <ThemedText title style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px', display: 'block' }}>
+            Your contact sharing for this client
+          </ThemedText>
+          <div style={{ display: 'grid', gap: '8px' }}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() =>
+                shareContactMutation.mutate({
+                  shareEmail: !runnerShareToClient?.can_view_email,
+                  sharePhone: !!runnerShareToClient?.can_view_phone,
+                })
+              }
+              disabled={shareContactMutation.isPending}
+            >
+              {runnerShareToClient?.can_view_email ? 'Hide my email from client' : 'Reveal my email to client'}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() =>
+                shareContactMutation.mutate({
+                  shareEmail: !!runnerShareToClient?.can_view_email,
+                  sharePhone: !runnerShareToClient?.can_view_phone,
+                })
+              }
+              disabled={shareContactMutation.isPending}
+            >
+              {runnerShareToClient?.can_view_phone ? 'Hide my phone from client' : 'Reveal my phone to client'}
+            </Button>
+            <ThemedText style={{ fontSize: '12px', opacity: 0.7, display: 'block' }}>
+              Keep communication inside Errandly for security and dispute support.
+            </ThemedText>
           </div>
         </ThemedCard>
       )}

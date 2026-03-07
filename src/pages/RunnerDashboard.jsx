@@ -19,14 +19,18 @@ function useUnreadCount(userId) {
   const { data: count = 0 } = useQuery({
     queryKey: ['runner-unread-count', userId],
     queryFn: async () => {
-      const { data } = await supabase
+      const { count, error } = await supabase
         .from('notifications')
-        .select('id')
+        .select('id', { count: 'exact', head: true })
         .eq('user_id', userId)
         .eq('read', false);
-      return data?.length ?? 0;
+      if (error) throw error;
+      return count ?? 0;
     },
     enabled: !!userId,
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
     refetchInterval: 30000,
   });
 

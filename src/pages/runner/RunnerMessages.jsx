@@ -4,7 +4,8 @@ import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { ThemedText, ThemedCard } from '../../components/ThemedComponents';
 import { useNavigate } from 'react-router-dom';
-import { FiMessageSquare } from 'react-icons/fi';
+import { FiMessageSquare, FiCheck } from 'react-icons/fi';
+import Avatar from '../../components/Avatar';
 
 export default function RunnerMessages() {
   const navigate = useNavigate();
@@ -38,16 +39,19 @@ export default function RunnerMessages() {
       const partnerIds = Array.from(partnersMap.keys());
       const { data: profiles } = await supabase
         .from('profiles')
-        .select('user_id, first_name, last_name')
-        .in('user_id', partnerIds);
+        .select('id, first_name, last_name, avatar_url, kyc_verified')
+        .in('id', partnerIds);
 
       return Array.from(partnersMap.entries()).map(([partnerId, msg]) => {
-        const profile = profiles?.find((p) => p.user_id === partnerId);
+        const profile = profiles?.find((p) => p.id === partnerId);
         return {
           partnerId,
+          partnerFirstName: profile ? profile.first_name : 'User',
           partnerName: profile
             ? `${profile.first_name} ${profile.last_name}`
             : 'User',
+          avatar_url: profile?.avatar_url || null,
+          kyc_verified: profile?.kyc_verified || false,
           lastMessage: msg.content,
           lastTime: msg.created_at,
           isOwn: msg.sender_id === user.id,
@@ -111,30 +115,40 @@ export default function RunnerMessages() {
                   gap: '12px',
                 }}
               >
-                <div style={{ flex: 1 }}>
-                  <ThemedText
-                    title
-                    style={{
-                      fontWeight: '600',
-                      marginBottom: '4px',
-                      display: 'block',
-                    }}
-                  >
-                    {conv.partnerName}
-                  </ThemedText>
-                  <ThemedText
-                    style={{
-                      fontSize: '14px',
-                      opacity: 0.7,
-                      display: 'block',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {conv.isOwn ? 'You: ' : 'They: '}
-                    {conv.lastMessage}
-                  </ThemedText>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flex: 1 }}>
+                  <Avatar
+                    url={conv.avatar_url}
+                    size={48}
+                    kycVerified={conv.kyc_verified}
+                  />
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <ThemedText
+                        title
+                        style={{
+                          fontWeight: '600',
+                          marginBottom: '4px',
+                          display: 'block',
+                        }}
+                      >
+                        {conv.partnerFirstName}
+                      </ThemedText>
+                      {conv.kyc_verified && <FiCheck color={Colors.primary} />}
+                    </div>
+                    <ThemedText
+                      style={{
+                        fontSize: '14px',
+                        opacity: 0.7,
+                        display: 'block',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {conv.isOwn ? 'You: ' : ''}
+                      {conv.lastMessage}
+                    </ThemedText>
+                  </div>
                 </div>
                 <ThemedText
                   style={{

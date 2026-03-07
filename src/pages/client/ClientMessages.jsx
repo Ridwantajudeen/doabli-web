@@ -38,11 +38,11 @@ export default function ClientMessages() {
       const partnerIds = Array.from(partnersMap.keys());
       const { data: profiles } = await supabase
         .from('profiles')
-        .select('user_id, first_name, last_name, avatar_url, kyc_verified')
-        .in('user_id', partnerIds);
+        .select('id, first_name, last_name, avatar_url, kyc_verified')
+        .in('id', partnerIds);
 
       return Array.from(partnersMap.entries()).map(([partnerId, msg]) => {
-        const profile = profiles?.find((p) => p.user_id === partnerId);
+        const profile = profiles?.find((p) => p.id === partnerId);
         return {
           partnerId,
           partnerFirstName: profile ? profile.first_name : 'User',
