@@ -98,7 +98,7 @@ export default function RunnerDashboard() {
         className="w-full flex justify-between items-center px-6 py-4 sticky top-0 z-50"
         style={{ backgroundColor: theme.navBackground, borderBottom: `1px solid ${theme.uiBackground}` }}
       >
-        <h2 className="text-xl font-bold" style={{ color: Colors.primary }}>Errandly</h2>
+        <h2 className="text-xl font-bold" style={{ color: Colors.primary }}>Doabli</h2>
 
         {/* Desktop Nav */}
         <div className="hidden md:flex items-center gap-6">
@@ -211,3 +211,4 @@ export default function RunnerDashboard() {
     </ThemedView>
   );
 }
+

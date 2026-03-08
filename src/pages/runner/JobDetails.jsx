@@ -684,7 +684,7 @@ export default function JobDetails() {
               {runnerShareToClient?.can_view_phone ? 'Hide my phone from client' : 'Reveal my phone to client'}
             </Button>
             <ThemedText style={{ fontSize: '12px', opacity: 0.7, display: 'block' }}>
-              Keep communication inside Errandly for security and dispute support.
+              Keep communication inside Doabli for security and dispute support.
             </ThemedText>
           </div>
         </ThemedCard>
@@ -1238,3 +1238,4 @@ export default function JobDetails() {
     </div>
   );
 }
+

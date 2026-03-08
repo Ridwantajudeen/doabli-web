@@ -238,7 +238,7 @@ export default function Chat() {
               {partner ? partner.first_name : 'Chat'}
             </ThemedText>
             <ThemedText style={{ fontSize: '12px', opacity: 0.6, display: 'block' }}>
-              Keep communication inside Errandly
+              Keep communication inside Doabli
             </ThemedText>
           </div>
         </div>
@@ -362,7 +362,7 @@ export default function Chat() {
               Messaging is available only while you have an active, incomplete, or direct-hire job together.
             </ThemedText>
             <ThemedText style={{ fontSize: '12px', opacity: 0.7, display: 'block' }}>
-              For security and dispute support, keep all communication inside Errandly.
+              For security and dispute support, keep all communication inside Doabli.
             </ThemedText>
           </div>
         )}
@@ -404,3 +404,4 @@ export default function Chat() {
     </div>
   );
 }
+

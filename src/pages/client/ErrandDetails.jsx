@@ -1304,7 +1304,7 @@ export default function ErrandDetails() {
                 {clientShareToRunner?.can_view_phone ? 'Hide my phone from runner' : 'Reveal my phone to runner'}
               </Button>
               <ThemedText style={{ fontSize: '12px', opacity: 0.7, display: 'block' }}>
-                Keep communication inside Errandly for security and dispute support.
+                Keep communication inside Doabli for security and dispute support.
               </ThemedText>
             </div>
           </ThemedCard>
@@ -1449,3 +1449,4 @@ export default function ErrandDetails() {
     </ThemedView>
   );
 }
+

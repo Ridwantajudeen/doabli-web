@@ -1189,7 +1189,7 @@ export default function RunnerProfile() {
                     <Button
                       variant="primary"
                       size="sm"
-                      onClick={() => window.open('mailto:support@errandly.com', '_blank')}
+                      onClick={() => window.open('mailto:support@Doabli.com', '_blank')}
                       style={{ width: 'fit-content', backgroundColor: '#22c55e' }}
                     >
                       Contact Support

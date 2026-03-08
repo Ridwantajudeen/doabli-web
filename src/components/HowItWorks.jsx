@@ -15,7 +15,7 @@ export default function HowItWorks() {
       padding: "60px 32px"
     }}>
       <h2 style={{ fontSize: 36, textAlign: "center" }}>
-        How Errandly Works
+        How Doabli Works
       </h2>
 
       <div style={{
@@ -39,3 +39,4 @@ export default function HowItWorks() {
     </section>
   );
 }
+

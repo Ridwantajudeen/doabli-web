@@ -104,7 +104,7 @@ export default function ClientDashboard() {
         padding: '16px 24px', display: 'flex', justifyContent: 'space-between',
         alignItems: 'center', position: 'sticky', top: 0, zIndex: 50,
       }}>
-        <h2 style={{ color: Colors.primary, fontSize: '20px', fontWeight: '700' }}>Errandly</h2>
+        <h2 style={{ color: Colors.primary, fontSize: '20px', fontWeight: '700' }}>Doabli</h2>
 
         {/* DESKTOP NAV */}
         <div className="hidden md:flex gap-6 items-center">
@@ -219,3 +219,4 @@ export default function ClientDashboard() {
     </ThemedView>
   );
 }
+

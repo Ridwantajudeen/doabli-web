@@ -45,7 +45,7 @@ export default function Navbar() {
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
           <div style={{ color: Colors.primary }} className="text-2xl font-bold">
-            Errandly
+            Doabli
           </div>
 
           {/* Desktop Menu */}
@@ -126,3 +126,4 @@ export default function Navbar() {
     </nav>
   );
 }
+

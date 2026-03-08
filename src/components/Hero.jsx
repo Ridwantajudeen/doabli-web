@@ -34,7 +34,7 @@ export default function Hero() {
           }}
           className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight mb-6"
         >
-          Your Trusted Platform for Everyday Errands
+          Do it fast. Do it right. Doabli.
         </h1>
 
         {/* Subheading */}
@@ -47,8 +47,8 @@ export default function Hero() {
           }}
           className="text-lg sm:text-xl mb-8 leading-relaxed"
         >
-          Hire trusted runners to help you get things done — fast, reliable and stress-free. Errandly
-          connects busy people with verified runners.
+          From quick pickups to daily tasks, Doabli connects you with trusted
+          runners who get things done without the stress.
         </p>
 
         {/* CTA Button */}
@@ -60,17 +60,17 @@ export default function Hero() {
           }}
         >
           <Link to="/signup">
-          <Button
-            variant="primary"
-            size="lg"
-            onClick={() => {
-              // Navigate to signup
-              window.location.href = '/signup';
-            }}
-            className="hover:scale-105 transition-transform"
-          >
-            Start Now
-          </Button>
+            <Button
+              variant="primary"
+              size="lg"
+              onClick={() => {
+                // Navigate to signup
+                window.location.href = '/signup';
+              }}
+              className="hover:scale-105 transition-transform"
+            >
+              Get Started with Doabli
+            </Button>
           </Link>
         </div>
 

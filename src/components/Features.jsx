@@ -25,7 +25,7 @@ export default function Features() {
         color: Colors.dark.title
       }}>
       
-      <h2 style={{ fontSize: 36, marginBottom: 40 }}>Why Choose Errandly?</h2>
+      <h2 style={{ fontSize: 36, marginBottom: 40 }}>Why Choose Doabli?</h2>
 
       <div style={{
         display: "flex",
@@ -49,3 +49,4 @@ export default function Features() {
     </section>
   );
 }
+
