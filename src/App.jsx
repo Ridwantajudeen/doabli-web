@@ -8,6 +8,7 @@ import { QueryClientProvider, QueryClient } from '@tanstack/react-query';
 import LandingPage from './pages/LandingPage';
 import Signup from './pages/Signup';
 import Login from './pages/Login';
+import EmailConfirmed from './pages/EmailConfirmed';
 
 // Client Pages
 import ClientDashboard from './pages/ClientDashboard';
@@ -49,6 +50,7 @@ function App() {
               <Route path="/" element={<LandingPage />} />
               <Route path="/signup" element={<Signup />} />
               <Route path="/login" element={<Login />} />
+              <Route path="/email-confirmed" element={<EmailConfirmed />} />
 
               {/* Client Protected Routes */}
               <Route

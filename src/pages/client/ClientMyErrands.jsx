@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
@@ -21,6 +22,13 @@ export default function ClientMyErrands() {
   const navigate = useNavigate();
   const { theme, Colors } = useTheme();
   const { user } = useAuth();
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   const { data: errands = [], isLoading, error } = useQuery({
     queryKey: ['client-errands', user?.id],
@@ -38,10 +46,10 @@ export default function ClientMyErrands() {
   });
 
   return (
-    <div style={{ padding: '20px', maxWidth: '1000px', margin: '0 auto' }}>
+    <div style={{ padding: isMobile ? '14px' : '20px', maxWidth: '1000px', margin: '0 auto' }}>
       {/* Header */}
       <div style={{ marginBottom: '24px' }}>
-        <ThemedText title style={{ fontSize: '28px', fontWeight: 'bold', marginBottom: '4px', display: 'block' }}>
+        <ThemedText title style={{ fontSize: isMobile ? '24px' : '28px', fontWeight: 'bold', marginBottom: '4px', display: 'block' }}>
           My Errands
         </ThemedText>
         <ThemedText style={{ fontSize: '14px', opacity: 0.6, display: 'block', marginBottom: '16px' }}>
@@ -93,18 +101,18 @@ export default function ClientMyErrands() {
                 onClick={() => navigate(`/client/errand-details/${errand.id}`)}
                 style={{
                   cursor: 'pointer',
-                  display: 'grid',
-                  gridTemplateColumns: '1fr auto',
+                  display: 'flex',
+                  flexWrap: 'wrap',
                   gap: '16px',
                   alignItems: 'start',
                 }}
               >
                 {/* Left */}
-                <div>
-                  <div style={{ display: 'flex', gap: '12px', alignItems: 'start', marginBottom: '8px' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'start', marginBottom: '8px' }}>
                     <ThemedText
                       title
-                      style={{ fontSize: '18px', fontWeight: '600', flex: 1, display: 'block' }}
+                      style={{ fontSize: isMobile ? '16px' : '18px', fontWeight: '600', flex: 1, minWidth: 0, display: 'block' }}
                     >
                       {errand.title}
                     </ThemedText>
@@ -130,8 +138,8 @@ export default function ClientMyErrands() {
                     {errand.description}
                   </ThemedText>
 
-                  <div style={{ display: 'flex', gap: '16px', fontSize: '13px', alignItems: 'center' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><FiMapPin size={13} /> {errand.location}</span>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', fontSize: '13px', alignItems: 'center' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', minWidth: 0 }}><FiMapPin size={13} /> {errand.location}</span>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><FiCalendar size={13} /> {new Date(errand.created_at).toLocaleDateString()}</span>
                   </div>
                 </div>
@@ -143,8 +151,8 @@ export default function ClientMyErrands() {
                     color: 'white',
                     padding: '12px 16px',
                     borderRadius: '8px',
-                    textAlign: 'right',
-                    minWidth: '120px',
+                    textAlign: isMobile ? 'left' : 'right',
+                    minWidth: isMobile ? '100%' : '120px',
                   }}
                 >
                   <div style={{ fontSize: '12px', opacity: 0.9 }}>Payment</div>

@@ -18,7 +18,14 @@ export default function Chat() {
   const { theme, Colors } = useTheme();
   const { user } = useAuth();
   const [messageText, setMessageText] = useState('');
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
   const messagesEndRef = useRef(null);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   const { data: contactAccess } = useQuery({
     queryKey: ['contact-access', user?.id, partnerId],
@@ -180,7 +187,7 @@ export default function Chat() {
 
   if (isLoading) {
     return (
-      <div style={{ maxWidth: '900px', margin: '0 auto', padding: '20px', height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ maxWidth: '900px', margin: '0 auto', padding: isMobile ? '12px' : '20px', height: '100vh', display: 'flex', flexDirection: 'column' }}>
         <ThemedText>Loading chat...</ThemedText>
       </div>
     );
@@ -203,11 +210,13 @@ export default function Chat() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '16px 20px',
+          padding: isMobile ? '12px' : '16px 20px',
           borderBottom: `1px solid ${theme.uiBackground}`,
+          gap: '10px',
+          flexWrap: isMobile ? 'wrap' : 'nowrap',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '10px' : '16px', minWidth: 0, flex: 1 }}>
           <button
             onClick={() => navigate('/client/messages')}
             style={{
@@ -225,19 +234,19 @@ export default function Chat() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <Avatar
               url={partner?.avatar_url}
-              size={48}
+              size={isMobile ? 40 : 48}
               kycVerified={partner?.kyc_verified}
             />
           </div>
 
-          <div>
+          <div style={{ minWidth: 0 }}>
             <ThemedText
               title
               style={{ fontSize: '16px', fontWeight: '600', display: 'block' }}
             >
               {partner ? partner.first_name : 'Chat'}
             </ThemedText>
-            <ThemedText style={{ fontSize: '12px', opacity: 0.6, display: 'block' }}>
+            <ThemedText style={{ fontSize: '12px', opacity: 0.6, display: 'block', whiteSpace: isMobile ? 'normal' : 'nowrap' }}>
               Keep communication inside Doabli
             </ThemedText>
           </div>
@@ -255,6 +264,7 @@ export default function Chat() {
             variant="secondary"
             size="sm"
             onClick={() => navigate(`/client/runner-profile/${partner.id}`)}
+            style={{ width: isMobile ? '100%' : 'auto' }}
           >
             View Profile
           </Button>
@@ -266,7 +276,7 @@ export default function Chat() {
         style={{
           flex: 1,
           overflowY: 'auto',
-          padding: '20px',
+          padding: isMobile ? '12px' : '20px',
           display: 'flex',
           flexDirection: 'column',
           gap: '12px',
@@ -300,7 +310,8 @@ export default function Chat() {
 
                 <div
                   style={{
-                    maxWidth: '60%',
+                    maxWidth: isMobile ? '82%' : '60%',
+                    width: 'fit-content',
                     padding: '12px 16px',
                     borderRadius: '12px',
                     backgroundColor: msg.type === 'price_update' ? Colors.warning + '20' : (isOwn ? Colors.primary : theme.uiBackground),
@@ -350,10 +361,11 @@ export default function Chat() {
         onSubmit={handleSendMessage}
         style={{
           display: 'flex',
-          flexWrap: 'wrap',
+          flexWrap: 'nowrap',
           gap: '12px',
-          padding: '16px 20px',
+          padding: isMobile ? '12px' : '16px 20px',
           borderTop: `1px solid ${theme.uiBackground}`,
+          alignItems: 'center',
         }}
       >
         {!canMessage && (
@@ -378,6 +390,7 @@ export default function Chat() {
           }}
           style={{
             flex: 1,
+            minWidth: 0,
             padding: '12px 16px',
             backgroundColor: theme.uiBackground,
             border: `1px solid ${theme.uiBackground}`,
@@ -396,7 +409,14 @@ export default function Chat() {
           variant="primary"
           onClick={handleSendMessage}
           disabled={!canMessage || !messageText.trim() || sendMutation.isPending}
-          style={{ whiteSpace: 'nowrap' }}
+          style={{
+            whiteSpace: 'nowrap',
+            width: 'auto',
+            backgroundColor: '#22c55e',
+            borderColor: '#22c55e',
+            boxShadow: '0 4px 12px rgba(34, 197, 94, 0.35)',
+            color: '#ffffff',
+          }}
         >
           {sendMutation.isPending ? '...' : 'Send'}
         </Button>

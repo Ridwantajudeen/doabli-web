@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
@@ -11,6 +12,13 @@ export default function ClientMessages() {
   const navigate = useNavigate();
   const { theme, Colors } = useTheme();
   const { user } = useAuth();
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   const { data: conversations = [], isLoading } = useQuery({
     queryKey: ['messages', user?.id],
@@ -62,11 +70,11 @@ export default function ClientMessages() {
 
 
   return (
-    <div style={{ padding: '20px', maxWidth: '1000px', margin: '0 auto' }}>
+    <div style={{ padding: isMobile ? '14px' : '20px', maxWidth: '1000px', margin: '0 auto' }}>
       <ThemedText
         title
         style={{
-          fontSize: '28px',
+          fontSize: isMobile ? '24px' : '28px',
           fontWeight: 'bold',
           marginBottom: '20px',
           display: 'block',
@@ -112,6 +120,7 @@ export default function ClientMessages() {
                     justifyContent: 'space-between',
                     alignItems: 'start',
                     gap: '12px',
+                    flexWrap: 'wrap',
                   }}
                 >
                   <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flex: 1 }}>
@@ -156,6 +165,7 @@ export default function ClientMessages() {
                       fontSize: '12px',
                       opacity: 0.6,
                       whiteSpace: 'nowrap',
+                      marginLeft: isMobile ? '60px' : 0,
                     }}
                   >
                     {new Date(conv.lastTime).toLocaleDateString()}

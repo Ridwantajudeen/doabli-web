@@ -364,29 +364,38 @@ export default function JobDetails() {
   // ✅ Helper: Get reason why can't withdraw
   const getWithdrawBlockReason = () => {
     if (!escrow) return null;
-    
+
     if (escrow.withdrawn_at) {
-      return '✓ Already withdrawn on ' + new Date(escrow.withdrawn_at).toLocaleDateString();
+      return 'Already withdrawn on ' + new Date(escrow.withdrawn_at).toLocaleDateString();
     }
-    
+
+    if (
+      (escrow.status === 'pending' || escrow.status === 'funded') &&
+      escrow.runner_status === 'completed' &&
+      escrow.client_status !== 'confirmed'
+    ) {
+      return 'Waiting for client to confirm job completion';
+    }
+
     if (escrow.status !== 'released' && escrow.status !== 'releasable') {
-      return '⏳ Waiting for client to confirm job completion';
+      return null;
     }
-    
+
     if (escrow.client_status !== 'confirmed') {
-      return '⏳ Waiting for client approval';
+      return 'Waiting for client approval';
     }
-    
+
     if (!bankAccount) {
-      return '❌ Add bank account details in your profile';
+      return 'Add bank account details in your profile';
     }
-    
+
     if (bankAccount.status !== 'approved') {
-      return '⏳ Bank account pending admin approval';
+      return 'Bank account pending admin approval';
     }
-    
+
     return null;
   };
+  const withdrawBlockReason = getWithdrawBlockReason();
 
   if (isLoading) {
     return (
@@ -891,7 +900,7 @@ export default function JobDetails() {
         )}
 
         {/* Show reason if can't withdraw */}
-        {!canWithdraw() && escrow && (
+        {!canWithdraw() && escrow && withdrawBlockReason && (
           <div style={{ 
             padding: '12px', 
             backgroundColor: escrow.withdrawn_at ? '#8b5cf620' : '#ef444420', 
@@ -902,7 +911,7 @@ export default function JobDetails() {
               fontSize: '13px', 
               color: escrow.withdrawn_at ? '#8b5cf6' : '#ef4444'
             }}>
-              {getWithdrawBlockReason()}
+              {withdrawBlockReason}
             </ThemedText>
           </div>
         )}
@@ -1238,4 +1247,5 @@ export default function JobDetails() {
     </div>
   );
 }
+
 

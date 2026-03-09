@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
@@ -11,6 +12,13 @@ export default function RunnerMessages() {
   const navigate = useNavigate();
   const { theme, Colors } = useTheme();
   const { user } = useAuth();
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   // Fetch conversations
   const { data: conversations = [], isLoading } = useQuery({
@@ -62,12 +70,12 @@ export default function RunnerMessages() {
   });
 
   return (
-    <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
+    <div style={{ maxWidth: '1000px', margin: '0 auto', padding: isMobile ? '0 6px' : 0 }}>
       {/* Header */}
       <ThemedText
         title
         style={{
-          fontSize: '28px',
+          fontSize: isMobile ? '24px' : '28px',
           fontWeight: 'bold',
           marginBottom: '20px',
           display: 'block',
@@ -113,6 +121,7 @@ export default function RunnerMessages() {
                   justifyContent: 'space-between',
                   alignItems: 'start',
                   gap: '12px',
+                  flexWrap: 'wrap',
                 }}
               >
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flex: 1 }}>
@@ -155,6 +164,7 @@ export default function RunnerMessages() {
                     fontSize: '12px',
                     opacity: 0.6,
                     whiteSpace: 'nowrap',
+                    marginLeft: isMobile ? '60px' : 0,
                   }}
                 >
                   {new Date(conv.lastTime).toLocaleDateString()}

@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
@@ -18,6 +19,13 @@ export default function RunnerApplications() {
   const navigate = useNavigate();
   const { theme, Colors } = useTheme();
   const { user, profile } = useAuth();
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   // Fetch applications
   const { data: applications = [], isLoading, error, refetch } = useQuery({
@@ -151,14 +159,15 @@ export default function RunnerApplications() {
         onClick={() => navigate(`/runner/job-details/${app.errand_id}`)}
         style={{ cursor: 'pointer' }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: '12px' }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: '12px', flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
               <ThemedText
                 title
                 style={{
-                  fontSize: '16px',
+                  fontSize: isMobile ? '15px' : '16px',
                   fontWeight: '600',
+                  minWidth: 0,
                   display: 'block',
                 }}
               >
@@ -190,7 +199,7 @@ export default function RunnerApplications() {
             </ThemedText>
           </div>
 
-          <div style={{ textAlign: 'right' }}>
+          <div style={{ textAlign: isMobile ? 'left' : 'right', minWidth: isMobile ? '100%' : 'unset' }}>
             <ThemedText
               style={{
                 fontSize: '16px',
@@ -211,6 +220,9 @@ export default function RunnerApplications() {
                 fontSize: '12px',
                 fontWeight: '600',
                 whiteSpace: 'nowrap',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
               }}
             >
               {config.icon} {config.label}
@@ -224,13 +236,13 @@ export default function RunnerApplications() {
   };
 
   return (
-    <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
+    <div style={{ maxWidth: '1000px', margin: '0 auto', padding: isMobile ? '0 6px' : 0 }}>
       {/* Header */}
       <div style={{ marginBottom: '24px' }}>
         <ThemedText
           title
           style={{
-            fontSize: '28px',
+            fontSize: isMobile ? '24px' : '28px',
             fontWeight: 'bold',
             marginBottom: '8px',
             display: 'block',
