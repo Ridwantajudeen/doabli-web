@@ -9,6 +9,8 @@ import LandingPage from './pages/LandingPage';
 import Signup from './pages/Signup';
 import Login from './pages/Login';
 import EmailConfirmed from './pages/EmailConfirmed';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 
 // Client Pages
 import ClientDashboard from './pages/ClientDashboard';
@@ -51,6 +53,8 @@ function App() {
               <Route path="/signup" element={<Signup />} />
               <Route path="/login" element={<Login />} />
               <Route path="/email-confirmed" element={<EmailConfirmed />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
 
               {/* Client Protected Routes */}
               <Route

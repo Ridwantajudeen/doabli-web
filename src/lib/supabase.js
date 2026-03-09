@@ -49,6 +49,46 @@ export const loginUser = async (email, password) => {
   }
 };
 
+export const requestPasswordReset = async (email) => {
+  try {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return { error: null };
+  } catch (err) {
+    return { error: err.message };
+  }
+};
+
+export const exchangeRecoveryCode = async (code) => {
+  try {
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) {
+      throw new Error(error.message);
+    }
+    return { session: data.session, error: null };
+  } catch (err) {
+    return { session: null, error: err.message };
+  }
+};
+
+export const updateUserPassword = async (password) => {
+  try {
+    const { data, error } = await supabase.auth.updateUser({ password });
+    if (error) {
+      throw new Error(error.message);
+    }
+    return { user: data.user, error: null };
+  } catch (err) {
+    return { user: null, error: err.message };
+  }
+};
+
 export const logoutUser = async () => {
   try {
     const { error } = await supabase.auth.signOut();
