@@ -3,6 +3,7 @@ import { createContext, useContext, useState, useEffect } from "react";
 import {
   signUpUser,
   loginUser,
+  signInWithGoogle,
   logoutUser,
   getCurrentSession,
   getProfile,
@@ -19,7 +20,7 @@ export function AuthProvider({ children }) {
   const [profileLoading, setProfileLoading] = useState(false);
 
   // ✅ Load profile with timeout and auto-create if missing
-  const loadProfileAsync = async (userId) => {
+  const loadProfileAsync = async (userId, userEmail) => {
     if (!userId) return null;
 
     // Use a non-throwing timeout so we don't reject the race and cause an exception.
@@ -42,7 +43,7 @@ export function AuthProvider({ children }) {
         const { profile: newProfile, error: createError } = await createProfile(
           userId,
           {
-            email: user?.email || "",
+            email: userEmail || user?.email || "",
             firstName: "",
             lastName: "",
             phone: "",
@@ -72,7 +73,7 @@ export function AuthProvider({ children }) {
         const { session } = await getCurrentSession();
         if (session?.user) {
           setUser(session.user);
-          await loadProfileAsync(session.user.id);
+          await loadProfileAsync(session.user.id, session.user.email);
         }
       } catch (err) {
         console.error("Init session error:", err);
@@ -89,7 +90,7 @@ export function AuthProvider({ children }) {
           setUser(session.user);
           setProfileLoading(true);
           try {
-            await loadProfileAsync(session.user.id);
+            await loadProfileAsync(session.user.id, session.user.email);
           } finally {
             setProfileLoading(false);
           }
@@ -105,11 +106,11 @@ export function AuthProvider({ children }) {
   }, []);
 
   // Explicit profile loader (callable)
-  const loadProfile = async (userId) => {
+  const loadProfile = async (userId, userEmail) => {
     if (!userId) return null;
     setProfileLoading(true);
     try {
-      return await loadProfileAsync(userId);
+      return await loadProfileAsync(userId, userEmail);
     } finally {
       setProfileLoading(false);
     }
@@ -156,13 +157,27 @@ export function AuthProvider({ children }) {
       setUser(authUser);
 
       // ✅ Auto-create profile if missing
-      const fetchedProfile = await loadProfileAsync(authUser.id);
+      const fetchedProfile = await loadProfileAsync(authUser.id, authUser.email);
 
       return { user: authUser, profile: fetchedProfile };
     } finally {
       setLoading(false);
     }
   };
+
+  const loginWithGoogle = async () => {
+    setLoading(true);
+    try {
+      const { error } = await signInWithGoogle();
+      if (error) return { error };
+      return { error: null };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const isProfileComplete = (p) =>
+    Boolean(p?.first_name && p?.last_name && p?.phone_number && p?.role);
 
   const logout = async () => {
     setLoading(true);
@@ -184,9 +199,11 @@ export function AuthProvider({ children }) {
         profileLoading,
         signup,
         login,
+        loginWithGoogle,
         logout,
         isAuthenticated: !!user,
         loadProfile,
+        isProfileComplete,
       }}
     >
       {children}

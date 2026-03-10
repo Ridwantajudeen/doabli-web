@@ -16,7 +16,7 @@ const roles = [
 export default function Signup() {
   const navigate = useNavigate();
   const { theme, Colors } = useTheme();
-  const { signup } = useAuth();
+  const { signup, loginWithGoogle } = useAuth();
 
   // Form state
   const [firstName, setFirstName] = useState('');
@@ -34,6 +34,7 @@ export default function Signup() {
 
   // Status
   const [loading, setLoading] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [serverMessage, setServerMessage] = useState('');
 
@@ -111,7 +112,7 @@ export default function Signup() {
       } else if (!user) {
         setServerMessage('Signup failed. Please try again.');
       } else {
-        setServerMessage('Signup successful! Redirecting...');
+        setServerMessage('Signup successful! We sent a verification link to your email. Open it to verify your account, then log in. Check your spam/junk if you do not see it.');
         setErrors({});
 
         // Reset form
@@ -150,6 +151,19 @@ export default function Signup() {
 
   const selectedRole = roles.find((r) => r.value === role);
 
+  const handleGoogleSignup = async () => {
+    setOauthLoading(true);
+    setServerMessage('');
+    try {
+      const { error } = await loginWithGoogle();
+      if (error) {
+        setServerMessage(error);
+      }
+    } finally {
+      setOauthLoading(false);
+    }
+  };
+
   return (
     <ThemedView style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
       <div style={{ width: '100%', maxWidth: '500px' }}>
@@ -158,9 +172,26 @@ export default function Signup() {
             <BrandLogo width={160} height={40} />
           </div>
           {/* Title */}
-          <ThemedText title style={{ fontSize: '28px', fontWeight: '700', marginBottom: '20px', textAlign: 'center', display: 'block' }}>
+          <ThemedText title style={{ fontSize: '28px', fontWeight: '700', marginBottom: '12px', textAlign: 'center', display: 'block' }}>
             Create Account
           </ThemedText>
+          <ThemedText style={{ fontSize: '14px', marginBottom: '20px', textAlign: 'center', display: 'block', opacity: 0.7 }}>
+            We will email you a verification link. Open it to activate your account, and check spam/junk if it does not arrive.
+          </ThemedText>
+
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={handleGoogleSignup}
+            disabled={oauthLoading}
+            style={{ width: '100%', marginBottom: '16px' }}
+          >
+            {oauthLoading ? 'Connecting...' : 'Continue with Google'}
+          </Button>
+
+          <div style={{ textAlign: 'center', fontSize: '12px', opacity: 0.6, marginBottom: '12px' }}>
+            or
+          </div>
 
           {/* Server Message */}
           {serverMessage && (

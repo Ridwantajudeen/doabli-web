@@ -11,13 +11,14 @@ import BrandLogo from '../components/BrandLogo';
 export default function Login() {
   const navigate = useNavigate();
   const { theme, Colors } = useTheme();
-  const { login, user } = useAuth();
+  const { login, loginWithGoogle } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   const [loading, setLoading] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [serverMessage, setServerMessage] = useState('');
 
@@ -89,6 +90,19 @@ export default function Login() {
 
   const isFormValid = validateEmail(email) && password.length > 0;
 
+  const handleGoogleLogin = async () => {
+    setOauthLoading(true);
+    setServerMessage('');
+    try {
+      const { error } = await loginWithGoogle();
+      if (error) {
+        setServerMessage(error);
+      }
+    } finally {
+      setOauthLoading(false);
+    }
+  };
+
   return (
     <ThemedView style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
       <div style={{ width: '100%', maxWidth: '500px' }}>
@@ -100,6 +114,20 @@ export default function Login() {
           <ThemedText title style={{ fontSize: '28px', fontWeight: '700', marginBottom: '20px', textAlign: 'center', display: 'block' }}>
             Welcome Back
           </ThemedText>
+
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={handleGoogleLogin}
+            disabled={oauthLoading}
+            style={{ width: '100%', marginBottom: '16px' }}
+          >
+            {oauthLoading ? 'Connecting...' : 'Continue with Google'}
+          </Button>
+
+          <div style={{ textAlign: 'center', fontSize: '12px', opacity: 0.6, marginBottom: '12px' }}>
+            or
+          </div>
 
           {/* Server Message */}
           {serverMessage && (

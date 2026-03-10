@@ -1727,7 +1727,7 @@ export default function AdminDashboard() {
         {/* Header */}
         <div style={{ marginBottom: '32px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-            <BrandLogo width={150} height={38} />
+            <BrandLogo width={150} height={38} variant="dark" />
             <h1 style={{ fontSize: '32px', fontWeight: '700', color: Colors.text, margin: 0 }}>Admin Dashboard</h1>
           </div>
           <p style={{ color: Colors.muted, fontSize: '14px' }}>Manage users, errands, payments, KYC, and system settings</p>

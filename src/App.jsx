@@ -8,9 +8,11 @@ import { QueryClientProvider, QueryClient } from '@tanstack/react-query';
 import LandingPage from './pages/LandingPage';
 import Signup from './pages/Signup';
 import Login from './pages/Login';
+import AuthCallback from './pages/AuthCallback';
 import EmailConfirmed from './pages/EmailConfirmed';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
+import CompleteProfile from './pages/CompleteProfile';
 
 // Client Pages
 import ClientDashboard from './pages/ClientDashboard';
@@ -57,9 +59,18 @@ function App() {
               <Route path="/" element={<LandingPage />} />
               <Route path="/signup" element={<Signup />} />
               <Route path="/login" element={<Login />} />
+              <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/email-confirmed" element={<EmailConfirmed />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
+              <Route
+                path="/complete-profile"
+                element={
+                  <ProtectedRoute allowIncomplete>
+                    <CompleteProfile />
+                  </ProtectedRoute>
+                }
+              />
 
               {/* Client Protected Routes */}
               <Route

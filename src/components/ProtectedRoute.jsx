@@ -1,17 +1,25 @@
 import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useEffect } from 'react';
 import { ThemedLoader } from '../components/ThemedComponents';
 
-export default function ProtectedRoute({ children, requiredRole }) {
-  const { user, profile, loading } = useAuth();
+export default function ProtectedRoute({ children, requiredRole, allowIncomplete = false }) {
+  const { user, profile, loading, profileLoading, isProfileComplete } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     // Redirect to login if auth finished loading and no user
     if (!loading && !user) {
       navigate('/login', { replace: true });
       return;
+    }
+
+    if (!loading && !profileLoading && user && profile && !allowIncomplete) {
+      if (!isProfileComplete(profile) && location.pathname !== '/complete-profile') {
+        navigate('/complete-profile', { replace: true });
+        return;
+      }
     }
 
     // Check role restriction if requiredRole is specified
@@ -22,11 +30,15 @@ export default function ProtectedRoute({ children, requiredRole }) {
         navigate(redirectPath, { replace: true });
       }
     }
-  }, [loading, user, profile, requiredRole, navigate]);
+  }, [loading, profileLoading, user, profile, requiredRole, allowIncomplete, isProfileComplete, location.pathname, navigate]);
 
   // Show loader while auth is still loading
-  if (loading) {
+  if (loading || profileLoading) {
     return <ThemedLoader />;
+  }
+
+  if (user && profile && !allowIncomplete && !isProfileComplete(profile)) {
+    return null;
   }
 
   // Check if user has required role

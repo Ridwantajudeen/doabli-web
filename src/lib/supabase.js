@@ -49,6 +49,25 @@ export const loginUser = async (email, password) => {
   }
 };
 
+export const signInWithGoogle = async () => {
+  try {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return { data, error: null };
+  } catch (err) {
+    return { data: null, error: err.message };
+  }
+};
+
 export const requestPasswordReset = async (email) => {
   try {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
@@ -66,6 +85,18 @@ export const requestPasswordReset = async (email) => {
 };
 
 export const exchangeRecoveryCode = async (code) => {
+  try {
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) {
+      throw new Error(error.message);
+    }
+    return { session: data.session, error: null };
+  } catch (err) {
+    return { session: null, error: err.message };
+  }
+};
+
+export const exchangeAuthCode = async (code) => {
   try {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
     if (error) {

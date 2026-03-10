@@ -34,7 +34,7 @@ export default function ForgotPassword() {
       return;
     }
 
-    setMessage('Reset link sent. Check your email and open the link to set a new password.');
+    setMessage('Reset link sent. Open the email and use the link to set a new password. Check your spam/junk folder if you do not see it.');
   };
 
   return (
@@ -48,7 +48,7 @@ export default function ForgotPassword() {
             Forgot Password
           </ThemedText>
           <ThemedText style={{ fontSize: '15px', marginBottom: '22px', textAlign: 'center', display: 'block' }}>
-            No worries, it happens. Drop your email and we will send a reset link.
+            No worries, it happens. Enter your email and we will send a reset link. Check spam/junk if it does not arrive.
           </ThemedText>
 
           {message && (
