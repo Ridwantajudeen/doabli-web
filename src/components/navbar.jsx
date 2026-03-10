@@ -14,6 +14,8 @@ export default function Navbar() {
 
   const colors = isDark ? Colors.dark : Colors.light;
   const navTextColor = scrolled ? '#ffffff' : Colors.light.title;
+  const mobileMenuBg = scrolled ? Colors.primary : Colors.light.navBackground;
+  const mobileMenuText = scrolled ? '#ffffff' : Colors.light.title;
   const navBackground = scrolled ? Colors.primary : 'transparent';
 
   const navLinks = [
@@ -95,14 +97,14 @@ export default function Navbar() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 50 }}
               transition={{ duration: 0.3 }}
-              style={{ backgroundColor: scrolled ? Colors.primary : colors.navBackground }}
+              style={{ backgroundColor: mobileMenuBg }}
               className="absolute top-16 right-4 w-44 rounded-xl shadow-lg p-4 flex flex-col space-y-4 md:hidden"
             >
               {navLinks.map((link) => (
                 <button
                   key={link.href}
                   onClick={() => handleNavClick(link.href)}
-                  style={{ color: navTextColor }}
+                  style={{ color: mobileMenuText }}
                   className="text-left hover:text-purple-400 transition font-medium"
                 >
                   {link.label}
