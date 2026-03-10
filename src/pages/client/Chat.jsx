@@ -5,7 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { showError } from '../../lib/notify';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
-import { ThemedText, ThemedTextInput, ThemedCard } from '../../components/ThemedComponents';
+import { ThemedView, ThemedText, ThemedTextInput, ThemedCard } from '../../components/ThemedComponents';
 import Button from '../../components/Button';
 import Avatar from '../../components/Avatar';
 import { FiArrowLeft, FiMessageSquare, FiCheck } from 'react-icons/fi';
@@ -187,23 +187,26 @@ export default function Chat() {
 
   if (isLoading) {
     return (
-      <div style={{ maxWidth: '900px', margin: '0 auto', padding: isMobile ? '12px' : '20px', height: '100vh', display: 'flex', flexDirection: 'column' }}>
-        <ThemedText>Loading chat...</ThemedText>
-      </div>
+      <ThemedView style={{ minHeight: '100vh' }}>
+        <div style={{ maxWidth: '900px', margin: '0 auto', padding: isMobile ? '12px' : '20px', height: '100vh', display: 'flex', flexDirection: 'column' }}>
+          <ThemedText>Loading chat...</ThemedText>
+        </div>
+      </ThemedView>
     );
   }
 
   return (
-    <div
-      style={{
-        maxWidth: '900px',
-        margin: '0 auto',
-        height: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        backgroundColor: theme.background,
-      }}
-    >
+    <ThemedView style={{ minHeight: '100vh' }}>
+      <div
+        style={{
+          maxWidth: '900px',
+          margin: '0 auto',
+          height: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          backgroundColor: theme.background,
+        }}
+      >
       {/* Header */}
       <div
         style={{
@@ -421,7 +424,8 @@ export default function Chat() {
           {sendMutation.isPending ? '...' : 'Send'}
         </Button>
       </form>
-    </div>
+      </div>
+    </ThemedView>
   );
 }
 

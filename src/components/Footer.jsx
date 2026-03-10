@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useTheme } from '../context/ThemeContext';
 import { Colors } from '../constants/colors';
+import BrandLogo from './BrandLogo';
 
 export default function Footer() {
-  const [isDark, setIsDark] = useState(true);
+  const { isDark } = useTheme();
   const colors = isDark ? Colors.dark : Colors.light;
+  const currentYear = new Date().getFullYear();
 
   const links = {
     Product: ['Features', 'Pricing', 'Security', 'Roadmap'],
@@ -26,9 +28,7 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-5 gap-8 mb-8">
           {/* Brand */}
           <div>
-            <h3 style={{ color: Colors.primary }} className="text-2xl font-bold mb-2">
-              Doabli
-            </h3>
+            <BrandLogo width={160} height={40} />
             <p className="text-sm opacity-75">
               Your trusted platform for everyday errands.
             </p>
@@ -65,7 +65,7 @@ export default function Footer() {
         {/* Bottom Footer */}
         <div className="flex flex-col md:flex-row justify-between items-center text-sm">
           <p className="opacity-75">
-            &copy; 2024 Doabli. All rights reserved.
+            &copy; {currentYear} Doabli. All rights reserved.
           </p>
           <div className="flex gap-6 mt-4 md:mt-0">
             <a href="#" className="hover:opacity-100 opacity-75 transition-opacity">

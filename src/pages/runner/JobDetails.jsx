@@ -6,7 +6,7 @@ import { supabase } from '../../lib/supabase';
 import { showError, showSuccess } from '../../lib/notify';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
-import { ThemedText, ThemedCard } from '../../components/ThemedComponents';
+import { ThemedView, ThemedText, ThemedCard } from '../../components/ThemedComponents';
 import Button from '../../components/Button';
 import { FiArrowLeft, FiMapPin, FiClock, FiCheck, FiAlertTriangle, FiX, FiCamera, FiDollarSign, FiUser } from 'react-icons/fi';
 import { fetchViewerContactAccess, updateOwnerContactShare } from '../../lib/contactAccess';
@@ -399,25 +399,30 @@ export default function JobDetails() {
 
   if (isLoading) {
     return (
-      <div style={{ textAlign: 'center', padding: '40px' }}>
-        <ThemedText>Loading job...</ThemedText>
-      </div>
+      <ThemedView style={{ minHeight: '100vh', padding: '40px' }}>
+        <div style={{ textAlign: 'center' }}>
+          <ThemedText>Loading job...</ThemedText>
+        </div>
+      </ThemedView>
     );
   }
 
   if (error || !job) {
     return (
-      <div style={{ textAlign: 'center', padding: '40px' }}>
-        <ThemedText style={{ color: Colors.warning }}>Job not found</ThemedText>
-        <Button onClick={() => navigate('/runner/home')} style={{ marginTop: '20px' }}>
-          Go Back
-        </Button>
-      </div>
+      <ThemedView style={{ minHeight: '100vh', padding: '40px' }}>
+        <div style={{ textAlign: 'center' }}>
+          <ThemedText style={{ color: Colors.warning }}>Job not found</ThemedText>
+          <Button onClick={() => navigate('/runner/home')} style={{ marginTop: '20px' }}>
+            Go Back
+          </Button>
+        </div>
+      </ThemedView>
     );
   }
 
   return (
-    <div style={{ maxWidth: '700px', margin: '0 auto', padding: '20px' }}>
+    <ThemedView style={{ minHeight: '100vh', padding: '20px' }}>
+      <div style={{ maxWidth: '700px', margin: '0 auto' }}>
       {/* Back Button */}
       <button
         onClick={() => navigate('/runner/home')}
@@ -1244,7 +1249,8 @@ export default function JobDetails() {
           </ThemedCard>
         </div>
       )}
-    </div>
+      </div>
+    </ThemedView>
   );
 }
 

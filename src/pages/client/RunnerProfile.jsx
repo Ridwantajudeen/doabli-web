@@ -6,6 +6,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { ThemedView, ThemedText, ThemedCard, ThemedTextInput } from '../../components/ThemedComponents';
 import Button from '../../components/Button';
+import BrandLogo from '../../components/BrandLogo';
 import { FiEdit, FiX, FiLogOut, FiUser, FiCamera, FiArrowLeft, FiStar, FiCheck } from 'react-icons/fi';
 import Avatar from '../../components/Avatar';
 import { useState, useEffect } from 'react';
@@ -230,6 +231,9 @@ export default function RunnerProfile() {
   return (
     <ThemedView style={{ minHeight: '100vh', padding: '20px' }}>
       <div style={{ maxWidth: '700px', margin: '0 auto' }}>
+      <div style={{ marginBottom: '16px' }}>
+        <BrandLogo width={140} height={36} />
+      </div>
       {/* Back Button */}
       <button
         onClick={() => navigate(-1)}

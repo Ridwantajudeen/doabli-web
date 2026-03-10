@@ -1,5 +1,5 @@
 import './App.css';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider } from './context/AuthContext';
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query';
@@ -42,6 +42,11 @@ const queryClient = new QueryClient({
 });
 
 function App() {
+  const location = useLocation();
+  const hideFooter =
+    location.pathname.startsWith('/client/chat') ||
+    location.pathname.startsWith('/runner/chat');
+
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
@@ -216,7 +221,7 @@ function App() {
               {/* Catch all - redirect to home */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
-            <Footer />
+            {!hideFooter && <Footer />}
           </ErrorBoundary>
         </AuthProvider>
       </ThemeProvider>

@@ -4,6 +4,7 @@ import { useTheme } from '../context/ThemeContext';
 import { requestPasswordReset } from '../lib/supabase';
 import Button from '../components/Button';
 import { ThemedView, ThemedCard, ThemedText, ThemedTextInput } from '../components/ThemedComponents';
+import BrandLogo from '../components/BrandLogo';
 
 export default function ForgotPassword() {
   const { theme, Colors } = useTheme();
@@ -40,6 +41,9 @@ export default function ForgotPassword() {
     <ThemedView style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
       <div style={{ width: '100%', maxWidth: '520px' }}>
         <ThemedCard>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '12px' }}>
+            <BrandLogo width={160} height={40} />
+          </div>
           <ThemedText title style={{ fontSize: '28px', fontWeight: '700', marginBottom: '8px', textAlign: 'center', display: 'block' }}>
             Forgot Password
           </ThemedText>

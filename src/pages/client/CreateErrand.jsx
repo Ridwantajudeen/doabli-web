@@ -9,6 +9,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { ThemedView, ThemedText, ThemedTextInput } from '../../components/ThemedComponents';
 import Button from '../../components/Button';
+import BrandLogo from '../../components/BrandLogo';
 
 export default function CreateErrand() {
   const navigate = useNavigate();
@@ -151,6 +152,9 @@ export default function CreateErrand() {
   return (
     <ThemedView style={{ minHeight: '100vh', padding: '20px' }}>
       <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+        <div style={{ marginBottom: '16px' }}>
+          <BrandLogo width={140} height={36} />
+        </div>
         <button
           onClick={() => navigate('/client/errands')}
           style={{

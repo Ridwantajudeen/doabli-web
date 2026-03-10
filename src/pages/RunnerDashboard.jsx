@@ -12,6 +12,7 @@ import { Menu, X } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useEffect } from 'react';
+import BrandLogo from '../components/BrandLogo';
 
 function useUnreadCount(userId) {
   const queryClient = useQueryClient();
@@ -98,7 +99,7 @@ export default function RunnerDashboard() {
         className="w-full flex justify-between items-center px-6 py-4 sticky top-0 z-50"
         style={{ backgroundColor: theme.navBackground, borderBottom: `1px solid ${theme.uiBackground}` }}
       >
-        <h2 className="text-xl font-bold" style={{ color: Colors.primary }}>Doabli</h2>
+        <BrandLogo width={140} height={36} />
 
         {/* Desktop Nav */}
         <div className="hidden md:flex items-center gap-6">

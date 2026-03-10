@@ -2,15 +2,19 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import Button from './Button';
+import BrandLogo from './BrandLogo';
 import { Colors } from '../constants/colors';
 import { Menu, X } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
 
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
-  const [isDark, setIsDark] = useState(true);
   const [scrolled, setScrolled] = useState(false);
+  const { isDark } = useTheme();
 
   const colors = isDark ? Colors.dark : Colors.light;
+  const navTextColor = scrolled ? '#ffffff' : Colors.light.title;
+  const navBackground = scrolled ? Colors.primary : 'transparent';
 
   const navLinks = [
     { label: 'Home', href: '#home' },
@@ -35,7 +39,7 @@ export default function Navbar() {
   return (
     <nav
       style={{
-        backgroundColor: scrolled ? colors.navBackground : 'transparent',
+        backgroundColor: navBackground,
         borderBottom: scrolled ? `1px solid ${colors.uiBackground}` : 'none',
         transition: 'all 0.3s ease',
       }}
@@ -44,9 +48,7 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
-          <div style={{ color: Colors.primary }} className="text-2xl font-bold">
-            Doabli
-          </div>
+          <BrandLogo width={140} height={36} variant={scrolled ? 'light' : 'dark'} />
 
           {/* Desktop Menu */}
           <div className="hidden md:flex gap-8">
@@ -54,7 +56,7 @@ export default function Navbar() {
               <button
                 key={link.href}
                 onClick={() => handleNavClick(link.href)}
-                style={{ color: colors.text }}
+                style={{ color: navTextColor }}
                 className="hover:opacity-80 transition-opacity font-medium"
               >
                 {link.label}
@@ -93,14 +95,14 @@ export default function Navbar() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 50 }}
               transition={{ duration: 0.3 }}
-              style={{ backgroundColor: colors.navBackground }}
+              style={{ backgroundColor: scrolled ? Colors.primary : colors.navBackground }}
               className="absolute top-16 right-4 w-44 rounded-xl shadow-lg p-4 flex flex-col space-y-4 md:hidden"
             >
               {navLinks.map((link) => (
                 <button
                   key={link.href}
                   onClick={() => handleNavClick(link.href)}
-                  style={{ color: colors.text }}
+                  style={{ color: navTextColor }}
                   className="text-left hover:text-purple-400 transition font-medium"
                 >
                   {link.label}

@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Users, Package, DollarSign, AlertCircle, BarChart3, Settings, Search, Filter, MoreVertical, TrendingUp, ChevronLeft, ChevronRight, Check, X, Eye, UserCheck, UserCog, Briefcase, Activity, Wallet, ShieldAlert } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
+import BrandLogo from '../../components/BrandLogo';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { showError, showSuccess } from '../../lib/notify';
@@ -1725,7 +1726,10 @@ export default function AdminDashboard() {
       <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
         {/* Header */}
         <div style={{ marginBottom: '32px' }}>
-          <h1 style={{ fontSize: '32px', fontWeight: '700', color: Colors.text, marginBottom: '8px' }}>Admin Dashboard</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+            <BrandLogo width={150} height={38} />
+            <h1 style={{ fontSize: '32px', fontWeight: '700', color: Colors.text, margin: 0 }}>Admin Dashboard</h1>
+          </div>
           <p style={{ color: Colors.muted, fontSize: '14px' }}>Manage users, errands, payments, KYC, and system settings</p>
         </div>
 

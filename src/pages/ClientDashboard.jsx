@@ -13,6 +13,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import BrandLogo from '../components/BrandLogo';
 
 function useUnreadCount(userId) {
   const queryClient = useQueryClient();
@@ -104,7 +105,7 @@ export default function ClientDashboard() {
         padding: '16px 24px', display: 'flex', justifyContent: 'space-between',
         alignItems: 'center', position: 'sticky', top: 0, zIndex: 50,
       }}>
-        <h2 style={{ color: Colors.primary, fontSize: '20px', fontWeight: '700' }}>Doabli</h2>
+        <BrandLogo width={140} height={36} />
 
         {/* DESKTOP NAV */}
         <div className="hidden md:flex gap-6 items-center">

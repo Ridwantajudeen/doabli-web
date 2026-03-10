@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { ThemedView, ThemedCard, ThemedText } from '../components/ThemedComponents';
+import BrandLogo from '../components/BrandLogo';
 
 export default function EmailConfirmed() {
   const { Colors } = useTheme();
@@ -29,6 +30,9 @@ export default function EmailConfirmed() {
     >
       <div style={{ width: '100%', maxWidth: '560px' }}>
         <ThemedCard style={{ textAlign: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '12px' }}>
+            <BrandLogo width={170} height={42} />
+          </div>
           <ThemedText
             title
             style={{

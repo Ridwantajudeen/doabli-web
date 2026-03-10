@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import Button from '../components/Button';
 import { ThemedView, ThemedCard, ThemedText, ThemedTextInput } from '../components/ThemedComponents';
 import { friendlyMessage } from '../lib/notify';
+import BrandLogo from '../components/BrandLogo';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -92,6 +93,9 @@ export default function Login() {
     <ThemedView style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
       <div style={{ width: '100%', maxWidth: '500px' }}>
         <ThemedCard>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '12px' }}>
+            <BrandLogo width={160} height={40} />
+          </div>
           {/* Title */}
           <ThemedText title style={{ fontSize: '28px', fontWeight: '700', marginBottom: '20px', textAlign: 'center', display: 'block' }}>
             Welcome Back
