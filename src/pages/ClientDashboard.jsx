@@ -99,13 +99,21 @@ export default function ClientDashboard() {
   return (
     <ThemedView style={{ backgroundColor: theme.background, minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       {/* NAVBAR */}
-      <nav style={{
-        width: '100%', backgroundColor: theme.navBackground,
-        borderBottom: `1px solid ${theme.uiBackground}`,
-        padding: '16px 24px', display: 'flex', justifyContent: 'space-between',
-        alignItems: 'center', position: 'sticky', top: 0, zIndex: 50,
-      }}>
-        <BrandLogo width={140} height={36} />
+      <nav
+        className="px-4 py-3 md:px-6 md:py-4"
+        style={{
+          width: '100%',
+          backgroundColor: theme.navBackground,
+          borderBottom: `1px solid ${theme.uiBackground}`,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          position: 'sticky',
+          top: 0,
+          zIndex: 50,
+        }}
+      >
+        <BrandLogo width={110} height={28} />
 
         {/* DESKTOP NAV */}
         <div className="hidden md:flex gap-6 items-center">
@@ -172,10 +180,19 @@ export default function ClientDashboard() {
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.2 }}
             style={{
-              position: 'absolute', top: '60px', right: '16px',
-              backgroundColor: theme.navBackground, border: `1px solid ${theme.uiBackground}`,
-              borderRadius: '12px', padding: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-              zIndex: 100, width: '180px', display: 'flex', flexDirection: 'column', gap: '8px',
+              position: 'absolute',
+              top: '64px',
+              left: '12px',
+              right: '12px',
+              backgroundColor: theme.navBackground,
+              border: `1px solid ${theme.uiBackground}`,
+              borderRadius: '16px',
+              padding: '14px',
+              boxShadow: '0 10px 30px rgba(0,0,0,0.18)',
+              zIndex: 100,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
             }}
           >
             {tabs.map(tab => (
@@ -183,9 +200,17 @@ export default function ClientDashboard() {
                 key={tab.id}
                 onClick={() => handleTabChange(tab.id)}
                 style={{
-                  background: 'none', border: 'none', textAlign: 'left', fontSize: '14px',
+                  background: activeTab === tab.id ? theme.uiBackground : 'transparent',
+                  border: 'none',
+                  textAlign: 'left',
+                  fontSize: '15px',
                   color: activeTab === tab.id ? Colors.primary : theme.text,
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '10px 8px',
+                  borderRadius: '10px',
                 }}
               >
                 {tab.label}
@@ -203,8 +228,15 @@ export default function ClientDashboard() {
             <button
               onClick={() => { logout(); setMobileMenuOpen(false); }}
               style={{
-                marginTop: '8px', padding: '6px', backgroundColor: Colors.warning,
-                border: 'none', color: '#fff', borderRadius: '6px', cursor: 'pointer', fontSize: '14px',
+                marginTop: '8px',
+                padding: '10px 12px',
+                backgroundColor: Colors.warning,
+                border: 'none',
+                color: '#fff',
+                borderRadius: '10px',
+                cursor: 'pointer',
+                fontSize: '15px',
+                width: '100%',
               }}
             >
               Logout

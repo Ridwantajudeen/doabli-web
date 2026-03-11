@@ -153,7 +153,7 @@ export default function CreateErrand() {
     <ThemedView style={{ minHeight: '100vh', padding: '20px' }}>
       <div style={{ maxWidth: '600px', margin: '0 auto' }}>
         <div style={{ marginBottom: '16px' }}>
-          <BrandLogo width={140} height={36} />
+          <BrandLogo width={120} height={32} />
         </div>
         <button
           onClick={() => navigate('/client/errands')}

@@ -8,6 +8,21 @@ import { ThemedView, ThemedCard, ThemedText, ThemedTextInput } from '../componen
 import { friendlyMessage } from '../lib/notify';
 import BrandLogo from '../components/BrandLogo';
 
+const GoogleIcon = ({ size = 18 }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 48 48"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <path fill="#EA4335" d="M24 9.5c3.2 0 6.1 1.1 8.3 3.1l6.2-6.2C34.8 2.9 29.7 1 24 1 14.6 1 6.6 6.6 2.7 14.7l7.3 5.7C12 14 17.6 9.5 24 9.5z" />
+    <path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-2.7-.4-3.9H24v7.4h12.7c-.6 3.3-2.5 6.1-5.5 7.9l6.6 5.1c3.9-3.6 6.2-8.9 6.2-16.5z" />
+    <path fill="#FBBC05" d="M9.9 28.4c-1-2.9-1-6 0-8.9l-7.3-5.7C.9 17.7 0 20.8 0 24s.9 6.3 2.6 9.2l7.3-5.7z" />
+    <path fill="#34A853" d="M24 47c5.7 0 10.5-1.9 14-5.2l-6.6-5.1c-1.8 1.2-4.1 1.9-7.4 1.9-6.4 0-12-4.3-14-10.4l-7.3 5.7C6.6 41.4 14.6 47 24 47z" />
+  </svg>
+);
+
 const roles = [
   { label: 'Client', value: 'client', description: 'I need errands done' },
   { label: 'Runner', value: 'runner', description: 'I want to run errands' },
@@ -169,7 +184,7 @@ export default function Signup() {
       <div style={{ width: '100%', maxWidth: '500px' }}>
         <ThemedCard>
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '12px' }}>
-            <BrandLogo width={160} height={40} />
+            <BrandLogo width={120} height={32} />
           </div>
           {/* Title */}
           <ThemedText title style={{ fontSize: '28px', fontWeight: '700', marginBottom: '12px', textAlign: 'center', display: 'block' }}>
@@ -178,20 +193,6 @@ export default function Signup() {
           <ThemedText style={{ fontSize: '14px', marginBottom: '20px', textAlign: 'center', display: 'block', opacity: 0.7 }}>
             We will email you a verification link. Open it to activate your account, and check spam/junk if it does not arrive.
           </ThemedText>
-
-          <Button
-            variant="secondary"
-            size="md"
-            onClick={handleGoogleSignup}
-            disabled={oauthLoading}
-            style={{ width: '100%', marginBottom: '16px' }}
-          >
-            {oauthLoading ? 'Connecting...' : 'Continue with Google'}
-          </Button>
-
-          <div style={{ textAlign: 'center', fontSize: '12px', opacity: 0.6, marginBottom: '12px' }}>
-            or
-          </div>
 
           {/* Server Message */}
           {serverMessage && (
@@ -502,6 +503,29 @@ export default function Signup() {
               {loading ? 'Signing up...' : 'Sign Up'}
             </Button>
           </form>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+            <div style={{ flex: 1, height: '1px', backgroundColor: theme.uiBackground }} />
+            <span style={{ fontSize: '12px', opacity: 0.6 }}>or</span>
+            <div style={{ flex: 1, height: '1px', backgroundColor: theme.uiBackground }} />
+          </div>
+
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={handleGoogleSignup}
+            disabled={oauthLoading}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '10px',
+            }}
+          >
+            <GoogleIcon />
+            {oauthLoading ? 'Connecting...' : 'Continue with Google'}
+          </Button>
 
           {/* Login Link */}
           <p style={{ textAlign: 'center', color: theme.iconColor, fontSize: '14px', margin: 0 }}>

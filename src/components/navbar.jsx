@@ -17,6 +17,13 @@ export default function Navbar() {
   const mobileMenuBg = scrolled ? Colors.primary : Colors.light.navBackground;
   const mobileMenuText = scrolled ? '#ffffff' : Colors.light.title;
   const navBackground = scrolled ? Colors.primary : 'transparent';
+  const signInButtonStyle = scrolled
+    ? {
+        color: '#ffffff',
+        border: '1px solid rgba(255, 255, 255, 0.6)',
+        backgroundColor: 'transparent',
+      }
+    : {};
 
   const navLinks = [
     { label: 'Home', href: '#home' },
@@ -50,7 +57,7 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
-          <BrandLogo width={140} height={36} variant={scrolled ? 'light' : 'dark'} />
+          <BrandLogo width={120} height={30} variant={scrolled ? 'light' : 'dark'} />
 
           {/* Desktop Menu */}
           <div className="hidden md:flex gap-8">
@@ -69,7 +76,7 @@ export default function Navbar() {
           {/* CTA Buttons */}
           <div className="hidden md:flex gap-3">
             <Link to="/login">
-              <Button variant="ghost" size="md">
+              <Button variant="ghost" size="md" style={signInButtonStyle}>
                 Sign In
               </Button>
             </Link>
@@ -113,7 +120,7 @@ export default function Navbar() {
 
               <div className="flex flex-col gap-2 pt-4 border-t" style={{ borderColor: colors.uiBackground }}>
                 <Link to="/login">
-                  <Button variant="ghost" size="md" className="w-full">
+                  <Button variant="ghost" size="md" className="w-full" style={signInButtonStyle}>
                     Sign In
                   </Button>
                 </Link>

@@ -28,7 +28,7 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-5 gap-8 mb-8">
           {/* Brand */}
           <div>
-            <BrandLogo width={160} height={40} />
+            <BrandLogo width={120} height={32} />
             <p className="text-sm opacity-75">
               Your trusted platform for everyday errands.
             </p>

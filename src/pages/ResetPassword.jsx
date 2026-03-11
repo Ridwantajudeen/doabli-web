@@ -118,7 +118,7 @@ export default function ResetPassword() {
       <div style={{ width: '100%', maxWidth: '520px' }}>
         <ThemedCard>
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '12px' }}>
-            <BrandLogo width={160} height={40} />
+            <BrandLogo width={120} height={32} />
           </div>
           <ThemedText title style={{ fontSize: '28px', fontWeight: '700', marginBottom: '8px', textAlign: 'center', display: 'block' }}>
             Reset Password

@@ -31,7 +31,7 @@ export default function EmailConfirmed() {
       <div style={{ width: '100%', maxWidth: '560px' }}>
         <ThemedCard style={{ textAlign: 'center' }}>
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '12px' }}>
-            <BrandLogo width={170} height={42} />
+            <BrandLogo width={130} height={34} />
           </div>
           <ThemedText
             title

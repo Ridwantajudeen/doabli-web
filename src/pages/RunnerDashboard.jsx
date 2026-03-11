@@ -96,10 +96,10 @@ export default function RunnerDashboard() {
     <ThemedView style={{ backgroundColor: theme.background, minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       {/* NAV */}
       <nav
-        className="w-full flex justify-between items-center px-6 py-4 sticky top-0 z-50"
+        className="w-full flex justify-between items-center px-4 py-3 md:px-6 md:py-4 sticky top-0 z-50"
         style={{ backgroundColor: theme.navBackground, borderBottom: `1px solid ${theme.uiBackground}` }}
       >
-        <BrandLogo width={140} height={36} />
+        <BrandLogo width={110} height={28} />
 
         {/* Desktop Nav */}
         <div className="hidden md:flex items-center gap-6">
@@ -164,10 +164,19 @@ export default function RunnerDashboard() {
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.2 }}
             style={{
-              position: 'absolute', top: '60px', right: '16px', width: '180px',
-              backgroundColor: theme.navBackground, border: `1px solid ${theme.uiBackground}`,
-              borderRadius: '12px', padding: '12px', display: 'flex', flexDirection: 'column',
-              gap: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 100,
+              position: 'absolute',
+              top: '64px',
+              left: '12px',
+              right: '12px',
+              backgroundColor: theme.navBackground,
+              border: `1px solid ${theme.uiBackground}`,
+              borderRadius: '16px',
+              padding: '14px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+              boxShadow: '0 10px 30px rgba(0,0,0,0.18)',
+              zIndex: 100,
             }}
           >
             {tabs.map(tab => (
@@ -175,9 +184,17 @@ export default function RunnerDashboard() {
                 key={tab.id}
                 onClick={() => handleTabChange(tab.id)}
                 style={{
-                  background: 'none', border: 'none', textAlign: 'left', fontSize: '14px',
-                  color: activeTab === tab.id ? Colors.primary : theme.text, cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  background: activeTab === tab.id ? theme.uiBackground : 'transparent',
+                  border: 'none',
+                  textAlign: 'left',
+                  fontSize: '15px',
+                  color: activeTab === tab.id ? Colors.primary : theme.text,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '10px 8px',
+                  borderRadius: '10px',
                 }}
               >
                 {tab.label}
@@ -195,8 +212,15 @@ export default function RunnerDashboard() {
             <button
               onClick={() => { logout(); setMobileMenuOpen(false); }}
               style={{
-                marginTop: '8px', padding: '6px', backgroundColor: Colors.warning,
-                border: 'none', color: '#fff', borderRadius: '6px', fontSize: '14px', cursor: 'pointer',
+                marginTop: '8px',
+                padding: '10px 12px',
+                backgroundColor: Colors.warning,
+                border: 'none',
+                color: '#fff',
+                borderRadius: '10px',
+                fontSize: '15px',
+                cursor: 'pointer',
+                width: '100%',
               }}
             >
               Logout

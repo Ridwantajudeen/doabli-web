@@ -5,6 +5,7 @@ export default function Button({
   variant = 'primary', 
   size = 'md', 
   className = '',
+  style = {},
   onClick,
   disabled = false,
   loading = false,
@@ -59,6 +60,7 @@ export default function Button({
         cursor: disabled || loading ? 'not-allowed' : 'pointer',
         opacity: disabled || loading ? 0.6 : 1,
         transition: 'all 0.2s ease',
+        ...style,
       }}
       onMouseEnter={(e) => {
         if (!disabled && !loading && variantConfig.hover) {
