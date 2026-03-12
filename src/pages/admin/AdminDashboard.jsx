@@ -172,35 +172,17 @@ export default function AdminDashboard() {
     },
   });
 
-  const buildVerifyPath = (escrow) => {
-    const params = new URLSearchParams();
-    if (escrow?.id) params.set('escrow_id', escrow.id);
-    if (escrow?.errand_id) params.set('errand_id', escrow.errand_id);
-    if (escrow?.runner_id) {
-      params.set('type', 'direct_hire_funding');
-    } else {
-      params.set('type', 'errand_posting');
-    }
-    return `/api/pay/verify/${encodeURIComponent(escrow.payment_reference)}?${params.toString()}`;
-  };
-
-  const retryVerificationMutation = useMutation({
-    mutationFn: async (escrow) =>
-      api(buildVerifyPath(escrow)),
-    onSuccess: () => {
-      showSuccess('Verification triggered. Refreshing payments...');
-      refetchEscrows();
-      refetchStats();
-    },
-    onError: (err) => {
-      showError('payment-verify', err);
-    },
-  });
-
   const reconcilePendingMutation = useMutation({
-    mutationFn: async () => api('/admin/escrows/reconcile', { method: 'POST' }),
+    mutationFn: async (escrow) => api('/admin/escrows/reconcile', {
+      method: 'POST',
+      body: JSON.stringify({
+        escrow_id: escrow?.id || null,
+        reference: escrow?.payment_reference || null,
+        limit: 1,
+      }),
+    }),
     onSuccess: (data) => {
-      showSuccess(`Reconciled ${data?.verified || 0} payments.`);
+      showSuccess(`Reconciled ${data?.verified || 0} payment(s).`);
       refetchEscrows();
       refetchStats();
     },
@@ -914,25 +896,6 @@ export default function AdminDashboard() {
   // RENDER: Payments
   const renderPayments = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button
-          onClick={() => reconcilePendingMutation.mutate()}
-          disabled={reconcilePendingMutation.isPending}
-          style={{
-            background: Colors.primary,
-            color: 'white',
-            border: 'none',
-            borderRadius: '8px',
-            padding: '10px 16px',
-            cursor: reconcilePendingMutation.isPending ? 'not-allowed' : 'pointer',
-            fontWeight: '600',
-            fontSize: '14px',
-            opacity: reconcilePendingMutation.isPending ? 0.7 : 1,
-          }}
-        >
-          {reconcilePendingMutation.isPending ? 'Reconciling...' : 'Reconcile Pending'}
-        </button>
-      </div>
       {escrowsLoading ? (
         <p style={{ color: Colors.muted }}>Loading escrows...</p>
       ) : escrows.length === 0 ? (
@@ -990,8 +953,8 @@ export default function AdminDashboard() {
                           <Eye size={14} /> View
                         </button>
                         <button
-                          onClick={() => retryVerificationMutation.mutate(escrow)}
-                          disabled={!escrow.payment_reference || retryVerificationMutation.isPending}
+                          onClick={() => reconcilePendingMutation.mutate(escrow)}
+                          disabled={!escrow.payment_reference || reconcilePendingMutation.isPending}
                           style={{
                             background: !escrow.payment_reference ? Colors.muted : Colors.success,
                             color: 'white',
@@ -1001,10 +964,10 @@ export default function AdminDashboard() {
                             cursor: !escrow.payment_reference ? 'not-allowed' : 'pointer',
                             fontSize: '12px',
                             fontWeight: '600',
-                            opacity: retryVerificationMutation.isPending ? 0.7 : 1,
+                            opacity: reconcilePendingMutation.isPending ? 0.7 : 1,
                           }}
                         >
-                          {retryVerificationMutation.isPending ? 'Retrying...' : 'Retry Verification'}
+                          {reconcilePendingMutation.isPending ? 'Reconciling...' : 'Reconcile'}
                         </button>
                       </div>
                     </td>
@@ -1119,8 +1082,8 @@ export default function AdminDashboard() {
 
             <div style={{ marginTop: '16px' }}>
               <button
-                onClick={() => retryVerificationMutation.mutate(selectedEscrow)}
-                disabled={!selectedEscrow.payment_reference || retryVerificationMutation.isPending}
+                onClick={() => reconcilePendingMutation.mutate(selectedEscrow)}
+                disabled={!selectedEscrow.payment_reference || reconcilePendingMutation.isPending}
                 style={{
                   background: !selectedEscrow.payment_reference ? Colors.muted : Colors.success,
                   color: 'white',
@@ -1130,10 +1093,10 @@ export default function AdminDashboard() {
                   cursor: !selectedEscrow.payment_reference ? 'not-allowed' : 'pointer',
                   fontSize: '13px',
                   fontWeight: '600',
-                  opacity: retryVerificationMutation.isPending ? 0.7 : 1,
+                  opacity: reconcilePendingMutation.isPending ? 0.7 : 1,
                 }}
               >
-                {retryVerificationMutation.isPending ? 'Retrying...' : 'Retry Verification'}
+                {reconcilePendingMutation.isPending ? 'Reconciling...' : 'Reconcile'}
               </button>
             </div>
           </div>
