@@ -152,6 +152,9 @@ export default function RunnerApplications() {
     const config = STATUS_CONFIG[app.status];
     const isDirectHire = app.errands?.status === 'offered';
     const isPendingDirectHire = isDirectHire && app.status === 'pending';
+    const isRunnerLastOffer = app.errands?.last_price_updated_by === profile?.id;
+    const displayPrice = isRunnerLastOffer ? app.errands?.price : (app.errands?.proposed_price || app.errands?.price);
+    const showPendingOffer = isRunnerLastOffer && app.errands?.proposed_price && app.errands?.proposed_price !== app.errands?.price;
 
     return (
       <ThemedCard
@@ -209,8 +212,13 @@ export default function RunnerApplications() {
                 display: 'block',
               }}
             >
-              ₦{(app.errands?.proposed_price || app.errands?.price).toLocaleString()}
+              ₦{Number(displayPrice || 0).toLocaleString()}
             </ThemedText>
+            {showPendingOffer && (
+              <ThemedText style={{ fontSize: '12px', opacity: 0.7, marginBottom: '6px', display: 'block' }}>
+                Your offer: ₦{Number(app.errands?.proposed_price || 0).toLocaleString()} (awaiting client approval)
+              </ThemedText>
+            )}
             <div
               style={{
                 backgroundColor: config.color,

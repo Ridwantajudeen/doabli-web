@@ -203,7 +203,9 @@ export default function RunnerProfile() {
       return;
     }
 
-    if (window.confirm(`Hire ${runner.first_name} for ₦${Number(selectedService.price).toLocaleString()}?`)) {
+    const proposedPrice = Number(directHireForm.proposed_price) || selectedService.price;
+    const hourlyText = selectedService?.pricing_type === 'hourly' || selectedService?.is_hourly ? '/hr' : '';
+    if (window.confirm(`Hire ${runner.first_name} for ₦${Number(proposedPrice).toLocaleString()}${hourlyText}?`)) {
       directHireMutation.mutate();
     }
   };

@@ -121,6 +121,10 @@ export default function JobDetails() {
   const canViewClientEmail = !!clientShareToRunner?.can_view_email;
   const canViewClientPhone = !!clientShareToRunner?.can_view_phone;
 
+  const isRunnerLastOffer = job?.last_price_updated_by === profile?.id;
+  const displayPrice = isRunnerLastOffer ? job?.price : (job?.proposed_price || job?.price);
+  const showPendingOffer = isRunnerLastOffer && job?.proposed_price && job?.proposed_price !== job?.price;
+
   // ✅ NEW: Fetch runner's bank account details
   const { data: bankAccount } = useQuery({
     queryKey: ['runner-bank-account', user?.id],
@@ -458,9 +462,14 @@ export default function JobDetails() {
         >
           <div style={{ fontSize: '12px', opacity: 0.9, marginBottom: '4px' }}>Budget</div>
           <div style={{ fontSize: '32px', fontWeight: 'bold' }}>
-            ₦{(job.proposed_price || job.price).toLocaleString()}
+            ₦{Number(displayPrice || 0).toLocaleString()}
             {job.is_hourly ? <span style={{ fontSize: '14px', marginLeft: '8px' }}>/hr</span> : null}
           </div>
+          {showPendingOffer && (
+            <div style={{ marginTop: '8px', fontSize: '12px', opacity: 0.9 }}>
+              Your counteroffer: ₦{Number(job.proposed_price || 0).toLocaleString()} (awaiting client approval)
+            </div>
+          )}
         </div>
       </div>
 
