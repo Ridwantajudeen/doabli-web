@@ -1,4 +1,4 @@
-// createErrand.jsx for web
+// createErrand.jsx 
 
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -9,7 +9,6 @@ import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { ThemedView, ThemedText, ThemedTextInput } from '../../components/ThemedComponents';
 import Button from '../../components/Button';
-import BrandLogo from '../../components/BrandLogo';
 
 export default function CreateErrand() {
   const navigate = useNavigate();
@@ -17,7 +16,6 @@ export default function CreateErrand() {
   const runnerId = searchParams.get('runnerId');
   const { theme, Colors } = useTheme();
   const { user, profile } = useAuth();
-  const apiBase = import.meta.env.VITE_API_URL || '';
 
   const [formData, setFormData] = useState({
     title: '',
@@ -41,7 +39,7 @@ export default function CreateErrand() {
 
   // Mutation: create errand and escrow after payment
   const createMutation = useMutation({
-    mutationFn: async ({ paystackRef }) => {
+    mutationFn: async () => {
       const price = parseFloat(formData.price);
 
       // 1. Create errand
@@ -85,32 +83,16 @@ export default function CreateErrand() {
         // Fall back to auth user id if profile isn't available.
         client_id: profile?.id ?? user.id,
         amount: price, // full client payment
-        status: 'pending_payment',
         client_status: 'pending',
         runner_status: 'pending',
-        payment_reference: paystackRef || null,
       };
       if (runnerId) escrowInsert.runner_id = runnerId;
 
-      const { data: escrow, error: escrowError } = await supabase
-        .from('escrow')
-        .insert([escrowInsert])
-        .select()
-        .single();
+      const { error: escrowError } = await supabase.from('escrow').insert([escrowInsert]);
       if (escrowError) {
         if (runnerId) await supabase.from('runner_applications').delete().eq('errand_id', errandData.id);
         await supabase.from('errands').delete().eq('id', errandData.id);
         throw escrowError;
-      }
-
-      // Best-effort verify to move escrow out of pending if webhook is delayed/missed.
-      if (paystackRef && escrow?.id) {
-        const type = runnerId ? 'offer_funding' : 'errand_posting';
-        fetch(
-          `${apiBase}/api/pay/verify/${encodeURIComponent(paystackRef)}?escrow_id=${escrow.id}&errand_id=${errandData.id}&type=${type}`
-        ).catch((err) => {
-          console.error('[createErrand] verify failed:', err);
-        });
       }
 
       return errandData;
@@ -144,9 +126,8 @@ export default function CreateErrand() {
       email: user.email,
       amount: Math.floor(parseFloat(formData.price) * 100), // convert to Kobo
       currency: 'NGN',
-      callback: function (response) {
-        const paystackRef = response?.reference || null;
-        createMutation.mutate({ paystackRef });
+      callback: function () {
+        createMutation.mutate();
       },
       onClose: function () {
         setIsPaying(false);
@@ -170,9 +151,6 @@ export default function CreateErrand() {
   return (
     <ThemedView style={{ minHeight: '100vh', padding: '20px' }}>
       <div style={{ maxWidth: '600px', margin: '0 auto' }}>
-        <div style={{ marginBottom: '16px' }}>
-          <BrandLogo width={120} height={32} />
-        </div>
         <button
           onClick={() => navigate('/client/errands')}
           style={{

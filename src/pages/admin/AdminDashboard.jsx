@@ -171,9 +171,21 @@ export default function AdminDashboard() {
     },
   });
 
+  const buildVerifyPath = (escrow) => {
+    const params = new URLSearchParams();
+    if (escrow?.id) params.set('escrow_id', escrow.id);
+    if (escrow?.errand_id) params.set('errand_id', escrow.errand_id);
+    if (escrow?.runner_id) {
+      params.set('type', 'direct_hire_funding');
+    } else {
+      params.set('type', 'errand_posting');
+    }
+    return `/api/pay/verify/${encodeURIComponent(escrow.payment_reference)}?${params.toString()}`;
+  };
+
   const retryVerificationMutation = useMutation({
-    mutationFn: async (reference) =>
-      api(`/api/pay/verify/${encodeURIComponent(reference)}`),
+    mutationFn: async (escrow) =>
+      api(buildVerifyPath(escrow)),
     onSuccess: () => {
       showSuccess('Verification triggered. Refreshing payments...');
       refetchEscrows();
@@ -946,7 +958,7 @@ export default function AdminDashboard() {
                           <Eye size={14} /> View
                         </button>
                         <button
-                          onClick={() => retryVerificationMutation.mutate(escrow.payment_reference)}
+                          onClick={() => retryVerificationMutation.mutate(escrow)}
                           disabled={!escrow.payment_reference || retryVerificationMutation.isPending}
                           style={{
                             background: !escrow.payment_reference ? Colors.muted : Colors.success,
@@ -1075,7 +1087,7 @@ export default function AdminDashboard() {
 
             <div style={{ marginTop: '16px' }}>
               <button
-                onClick={() => retryVerificationMutation.mutate(selectedEscrow.payment_reference)}
+                onClick={() => retryVerificationMutation.mutate(selectedEscrow)}
                 disabled={!selectedEscrow.payment_reference || retryVerificationMutation.isPending}
                 style={{
                   background: !selectedEscrow.payment_reference ? Colors.muted : Colors.success,

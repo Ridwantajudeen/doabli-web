@@ -13,6 +13,7 @@ import EmailConfirmed from './pages/EmailConfirmed';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import CompleteProfile from './pages/CompleteProfile';
+import PaystackReturn from './pages/PaystackReturn';
 
 // Client Pages
 import ClientDashboard from './pages/ClientDashboard';
@@ -63,6 +64,7 @@ function App() {
               <Route path="/email-confirmed" element={<EmailConfirmed />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/paystack-return" element={<PaystackReturn />} />
               <Route
                 path="/complete-profile"
                 element={
