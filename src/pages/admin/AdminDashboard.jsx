@@ -9,6 +9,7 @@ import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { showError, showSuccess } from '../../lib/notify';
 import AdminWithdrawals from './AdminWithdrawals';
+import { getApiBase } from '../../lib/apiBase';
 
 export default function AdminDashboard() {
   const { Colors } = useTheme();
@@ -32,7 +33,7 @@ export default function AdminDashboard() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [selectedErrand, setSelectedErrand] = useState(null);
   const [selectedEscrow, setSelectedEscrow] = useState(null);
-  const apiBase = import.meta.env.VITE_API_URL || '';
+  const apiBase = getApiBase();
 
   // Define all hooks BEFORE any conditional returns (required by React Hooks Rules)
   const api = useCallback(async (path, opts = {}) => {

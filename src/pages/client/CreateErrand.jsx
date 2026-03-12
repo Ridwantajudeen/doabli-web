@@ -1,14 +1,15 @@
 // createErrand.jsx 
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
-import { showError, showSuccess } from '../../lib/notify';
+import { showError } from '../../lib/notify';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { ThemedView, ThemedText, ThemedTextInput } from '../../components/ThemedComponents';
 import Button from '../../components/Button';
+import { getApiBase } from '../../lib/apiBase';
 
 export default function CreateErrand() {
   const navigate = useNavigate();
@@ -16,6 +17,7 @@ export default function CreateErrand() {
   const runnerId = searchParams.get('runnerId');
   const { theme, Colors } = useTheme();
   const { user, profile } = useAuth();
+  const apiBase = getApiBase();
 
   const [formData, setFormData] = useState({
     title: '',
@@ -27,79 +29,47 @@ export default function CreateErrand() {
   const [errors, setErrors] = useState({});
   const [isPaying, setIsPaying] = useState(false);
 
-  // Load Paystack script
-  useEffect(() => {
-    if (!window.PaystackPop) {
-      const script = document.createElement('script');
-      script.src = 'https://js.paystack.co/v1/inline.js';
-      script.async = true;
-      document.body.appendChild(script);
-    }
-  }, []);
-
-  // Mutation: create errand and escrow after payment
+  // Mutation: initialize payment on server and redirect to Paystack
   const createMutation = useMutation({
     mutationFn: async () => {
       const price = parseFloat(formData.price);
+      const token = (await supabase.auth.getSession()).data.session?.access_token;
+      if (!token) throw new Error('Authentication required');
 
-      // 1. Create errand
-      const { data: errandData, error: errandError } = await supabase
-        .from('errands')
-        .insert([
-          {
-            posted_by: user.id,
-            title: formData.title,
-            description: formData.description,
-            location: formData.location,
-            price: price,
-            status: runnerId ? 'offered' : 'posted',
-            assigned_to: null,
-          },
-        ])
-        .select()
-        .single();
+      const callbackUrl = `${window.location.origin}/paystack-return`;
 
-      if (errandError) throw errandError;
+      const res = await fetch(`${apiBase}/api/errands/create-with-payment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          title: formData.title,
+          description: formData.description,
+          location: formData.location,
+          price,
+          runner_id: runnerId || null,
+          user_id: user.id,
+          email: user.email,
+          callback_url: callbackUrl,
+        }),
+      });
 
-      // 2. If targeting a specific runner, create application
-      if (runnerId) {
-        const { error: appError } = await supabase.from('runner_applications').insert([
-          {
-            errand_id: errandData.id,
-            runner_id: runnerId,
-            status: 'pending',
-          },
-        ]);
-        if (appError) {
-          await supabase.from('errands').delete().eq('id', errandData.id);
-          throw appError;
-        }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to initialize payment');
       }
 
-      // 3. Create escrow
-      const escrowInsert = {
-        errand_id: errandData.id,
-        // Use profile.id when the DB escrow.client_id FK references profiles.id.
-        // Fall back to auth user id if profile isn't available.
-        client_id: profile?.id ?? user.id,
-        amount: price, // full client payment
-        client_status: 'pending',
-        runner_status: 'pending',
-      };
-      if (runnerId) escrowInsert.runner_id = runnerId;
-
-      const { error: escrowError } = await supabase.from('escrow').insert([escrowInsert]);
-      if (escrowError) {
-        if (runnerId) await supabase.from('runner_applications').delete().eq('errand_id', errandData.id);
-        await supabase.from('errands').delete().eq('id', errandData.id);
-        throw escrowError;
-      }
-
-      return errandData;
+      return await res.json();
     },
-    onSuccess: () => {
-      showSuccess(runnerId ? 'Offer sent to runner!' : 'Errand posted successfully!');
-      navigate('/client/errands');
+    onSuccess: (data) => {
+      if (data?.payment_url) {
+        setIsPaying(true);
+        window.location.href = data.payment_url;
+        return;
+      }
+      showError('generic', 'Payment URL not returned');
     },
     onError: (err) => {
       showError('generic', err);
@@ -119,33 +89,10 @@ export default function CreateErrand() {
     return Object.keys(newErrors).length === 0;
   };
 
-  // Paystack payment
-  const handlePaystackPayment = () => {
-    const handler = window.PaystackPop && window.PaystackPop.setup({
-      key: import.meta.env.VITE_PAYSTACK_KEY,
-      email: user.email,
-      amount: Math.floor(parseFloat(formData.price) * 100), // convert to Kobo
-      currency: 'NGN',
-      callback: function () {
-        createMutation.mutate();
-      },
-      onClose: function () {
-        setIsPaying(false);
-        showError('generic', 'Payment cancelled');
-      },
-    });
-    if (handler) {
-      setIsPaying(true);
-      handler.openIframe();
-    } else {
-      showError('generic', 'Paystack not loaded');
-    }
-  };
-
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!validateForm()) return;
-    handlePaystackPayment();
+    createMutation.mutate();
   };
 
   return (

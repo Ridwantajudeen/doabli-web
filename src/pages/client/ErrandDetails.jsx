@@ -12,6 +12,7 @@ import Button from '../../components/Button';
 import { FiClock, FiUser, FiCheck, FiX, FiMapPin, FiStar, FiArrowLeft, FiAlertTriangle, FiCamera } from 'react-icons/fi';
 import Avatar from '../../components/Avatar';
 import { fetchMessagingAccess, fetchViewerContactAccess, updateOwnerContactShare } from '../../lib/contactAccess';
+import { getApiBase } from '../../lib/apiBase';
 
 // ✅ CHANGE 1: Added 'offered' and 'pending_funding' so the badge shows correct labels
 const STATUS_CONFIG = {
@@ -41,6 +42,7 @@ export default function ErrandDetails() {
   const { theme, Colors } = useTheme();
   const { user, profile } = useAuth();
   const queryClient = useQueryClient();
+  const apiBase = getApiBase();
   
   // Dispute modal state
   const [showDisputeModal, setShowDisputeModal] = useState(false);
@@ -201,7 +203,7 @@ export default function ErrandDetails() {
   // Confirm job completion and release payment
   const confirmMutation = useMutation({
     mutationFn: async () => {
-      const apiUrl = import.meta.env.VITE_API_URL || '';
+      const apiUrl = apiBase;
       const token = (await supabase.auth.getSession()).data.session?.access_token;
       if (!token) throw new Error('Authentication required');
       const response = await fetch(`${apiUrl}/api/escrow/confirm`, {
@@ -243,7 +245,7 @@ export default function ErrandDetails() {
         });
       }
 
-      const apiUrl = import.meta.env.VITE_API_URL || '';
+      const apiUrl = apiBase;
       const token = (await supabase.auth.getSession()).data.session?.access_token;
       if (!token) throw new Error('Authentication required');
       const response = await fetch(`${apiUrl}/api/escrow/raise-dispute`, {
@@ -292,7 +294,7 @@ export default function ErrandDetails() {
         });
       }
 
-      const apiUrl = import.meta.env.VITE_API_URL || '';
+      const apiUrl = apiBase;
       const token = (await supabase.auth.getSession()).data.session?.access_token;
       if (!token) throw new Error('Authentication required');
       const response = await fetch(`${apiUrl}/api/escrow/defend-dispute`, {
@@ -397,7 +399,6 @@ export default function ErrandDetails() {
   // Counteroffer mutation
   const counterofferMutation = useMutation({
     mutationFn: async () => {
-      const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000';
       const token = (await supabase.auth.getSession()).data.session?.access_token;
       if (!token) throw new Error('Authentication required');
       const price = Number(counterofferPrice);
@@ -444,8 +445,6 @@ export default function ErrandDetails() {
   // backend which updates escrow, errand, and runner_applications.
   const fundMutation = useMutation({
     mutationFn: async () => {
-      const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-
       if (!escrow?.id || !escrow?.amount) {
         throw new Error('Escrow data not loaded yet — please try again');
       }

@@ -1,11 +1,12 @@
 import { useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ThemedView, ThemedText } from '../components/ThemedComponents';
+import { getApiBase } from '../lib/apiBase';
 
 export default function PaystackReturn() {
   const navigate = useNavigate();
   const location = useLocation();
-  const apiBase = import.meta.env.VITE_API_URL || '';
+  const apiBase = getApiBase();
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
