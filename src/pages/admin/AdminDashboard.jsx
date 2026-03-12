@@ -197,6 +197,18 @@ export default function AdminDashboard() {
     },
   });
 
+  const reconcilePendingMutation = useMutation({
+    mutationFn: async () => api('/admin/escrows/reconcile', { method: 'POST' }),
+    onSuccess: (data) => {
+      showSuccess(`Reconciled ${data?.verified || 0} payments.`);
+      refetchEscrows();
+      refetchStats();
+    },
+    onError: (err) => {
+      showError('reconcile-payments', err);
+    },
+  });
+
   // ✅ UPDATED: Review KYC mutation
   const reviewKYCMutation = useMutation({
     mutationFn: async ({ id, status, admin_notes, reason }) =>
@@ -902,6 +914,25 @@ export default function AdminDashboard() {
   // RENDER: Payments
   const renderPayments = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <button
+          onClick={() => reconcilePendingMutation.mutate()}
+          disabled={reconcilePendingMutation.isPending}
+          style={{
+            background: Colors.primary,
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            padding: '10px 16px',
+            cursor: reconcilePendingMutation.isPending ? 'not-allowed' : 'pointer',
+            fontWeight: '600',
+            fontSize: '14px',
+            opacity: reconcilePendingMutation.isPending ? 0.7 : 1,
+          }}
+        >
+          {reconcilePendingMutation.isPending ? 'Reconciling...' : 'Reconcile Pending'}
+        </button>
+      </div>
       {escrowsLoading ? (
         <p style={{ color: Colors.muted }}>Loading escrows...</p>
       ) : escrows.length === 0 ? (
