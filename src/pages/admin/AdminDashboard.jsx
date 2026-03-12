@@ -15,6 +15,7 @@ export default function AdminDashboard() {
   const { profile, user, profileLoading } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchInput, setSearchInput] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [resolvingDispute, setResolvingDispute] = useState(null);
@@ -28,6 +29,9 @@ export default function AdminDashboard() {
   const [reviewingBankAccount, setReviewingBankAccount] = useState(null);
   const [bankAccountRejectReason, setBankAccountRejectReason] = useState('');
   const [bankAccountAdminNotes, setBankAccountAdminNotes] = useState('');
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [selectedErrand, setSelectedErrand] = useState(null);
+  const [selectedEscrow, setSelectedEscrow] = useState(null);
   const apiBase = import.meta.env.VITE_API_URL || '';
 
   // Define all hooks BEFORE any conditional returns (required by React Hooks Rules)
@@ -167,6 +171,19 @@ export default function AdminDashboard() {
     },
   });
 
+  const retryVerificationMutation = useMutation({
+    mutationFn: async (reference) =>
+      api(`/api/pay/verify/${encodeURIComponent(reference)}`),
+    onSuccess: () => {
+      showSuccess('Verification triggered. Refreshing payments...');
+      refetchEscrows();
+      refetchStats();
+    },
+    onError: (err) => {
+      showError('payment-verify', err);
+    },
+  });
+
   // ✅ UPDATED: Review KYC mutation
   const reviewKYCMutation = useMutation({
     mutationFn: async ({ id, status, admin_notes, reason }) =>
@@ -225,6 +242,11 @@ export default function AdminDashboard() {
   // Format currency to Naira
   const formatNaira = (amount) => {
     return new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(amount || 0);
+  };
+
+  const applySearch = () => {
+    setSearchQuery(searchInput.trim());
+    setCurrentPage(1);
   };
 
   // Get stats from API or default values
@@ -420,10 +442,12 @@ export default function AdminDashboard() {
           <input
             type="text"
             placeholder="Search by name, email, or user ID..."
-            value={searchQuery}
+            value={searchInput}
             onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setCurrentPage(1);
+              setSearchInput(e.target.value);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') applySearch();
             }}
             style={{
               width: '100%',
@@ -437,6 +461,21 @@ export default function AdminDashboard() {
             }}
           />
         </div>
+        <button
+          onClick={applySearch}
+          style={{
+            background: Colors.primary,
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            padding: '10px 16px',
+            cursor: 'pointer',
+            fontWeight: '600',
+            fontSize: '14px',
+          }}
+        >
+          Search
+        </button>
       </div>
 
       {usersLoading ? (
@@ -478,21 +517,41 @@ export default function AdminDashboard() {
                       </span>
                     </td>
                     <td style={{ padding: '12px', textAlign: 'center' }}>
-                      <button
-                        onClick={() => suspendMutation.mutate({ id: user.id, suspended: !user.suspended })}
-                        style={{
-                          background: user.suspended ? Colors.success : Colors.error,
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '4px',
-                          padding: '6px 12px',
-                          cursor: 'pointer',
-                          fontSize: '12px',
-                          fontWeight: '600',
-                        }}
-                      >
-                        {user.suspended ? 'Unsuspend' : 'Suspend'}
-                      </button>
+                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                        <button
+                          onClick={() => setSelectedUser(user)}
+                          style={{
+                            background: Colors.primary,
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            padding: '6px 10px',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                          }}
+                        >
+                          <Eye size={14} /> View
+                        </button>
+                        <button
+                          onClick={() => suspendMutation.mutate({ id: user.id, suspended: !user.suspended })}
+                          style={{
+                            background: user.suspended ? Colors.success : Colors.error,
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            padding: '6px 12px',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            fontWeight: '600',
+                          }}
+                        >
+                          {user.suspended ? 'Unsuspend' : 'Suspend'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -501,6 +560,103 @@ export default function AdminDashboard() {
           </div>
           <Pagination />
         </>
+      )}
+
+      {selectedUser && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px',
+          overflowY: 'auto',
+        }}>
+          <div style={{
+            background: Colors.cardBackground,
+            border: `2px solid ${Colors.primary}`,
+            borderRadius: '12px',
+            padding: '24px',
+            maxWidth: '560px',
+            width: '100%',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            position: 'relative',
+          }}>
+            <button
+              onClick={() => setSelectedUser(null)}
+              style={{
+                position: 'absolute',
+                top: '12px',
+                right: '12px',
+                background: 'transparent',
+                border: 'none',
+                fontSize: '24px',
+                cursor: 'pointer',
+                color: Colors.text,
+              }}
+            >
+              ✕
+            </button>
+
+            <h3 style={{ color: Colors.primary, marginBottom: '16px', fontSize: '20px', fontWeight: '700' }}>User Details</h3>
+
+            <div style={{ display: 'grid', gap: '12px' }}>
+              <div>
+                <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>NAME</p>
+                <p style={{ margin: '6px 0 0', color: Colors.text, fontWeight: '600' }}>{selectedUser.full_name || 'N/A'}</p>
+              </div>
+              <div>
+                <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>PROFILE ID</p>
+                <p style={{ margin: '6px 0 0', color: Colors.text, fontFamily: 'monospace' }}>{selectedUser.id}</p>
+              </div>
+              <div>
+                <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>USER ID</p>
+                <p style={{ margin: '6px 0 0', color: Colors.text, fontFamily: 'monospace' }}>{selectedUser.user_id || 'N/A'}</p>
+              </div>
+              <div>
+                <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>EMAIL</p>
+                <p style={{ margin: '6px 0 0', color: Colors.text }}>{selectedUser.email || 'N/A'}</p>
+              </div>
+              <div>
+                <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>PHONE</p>
+                <p style={{ margin: '6px 0 0', color: Colors.text }}>{selectedUser.phone_number || 'N/A'}</p>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>ROLE</p>
+                  <p style={{ margin: '6px 0 0', color: Colors.text, textTransform: 'capitalize' }}>{selectedUser.role || 'N/A'}</p>
+                </div>
+                <div>
+                  <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>STATUS</p>
+                  <p style={{ margin: '6px 0 0', color: Colors.text }}>{selectedUser.suspended ? 'Suspended' : 'Active'}</p>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>KYC</p>
+                  <p style={{ margin: '6px 0 0', color: Colors.text }}>{selectedUser.kyc_verified ? 'Verified' : 'Not Verified'}</p>
+                </div>
+                <div>
+                  <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>RATING</p>
+                  <p style={{ margin: '6px 0 0', color: Colors.text }}>{selectedUser.average_rating ?? 'N/A'}</p>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>COMPLETED ERRANDS</p>
+                  <p style={{ margin: '6px 0 0', color: Colors.text }}>{selectedUser.completed_errands ?? 0}</p>
+                </div>
+                <div>
+                  <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>CREATED</p>
+                  <p style={{ margin: '6px 0 0', color: Colors.text }}>{new Date(selectedUser.created_at).toLocaleString()}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -514,10 +670,12 @@ export default function AdminDashboard() {
           <input
             type="text"
             placeholder="Search by title or ID..."
-            value={searchQuery}
+            value={searchInput}
             onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setCurrentPage(1);
+              setSearchInput(e.target.value);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') applySearch();
             }}
             style={{
               width: '100%',
@@ -531,6 +689,21 @@ export default function AdminDashboard() {
             }}
           />
         </div>
+        <button
+          onClick={applySearch}
+          style={{
+            background: Colors.primary,
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            padding: '10px 16px',
+            cursor: 'pointer',
+            fontWeight: '600',
+            fontSize: '14px',
+          }}
+        >
+          Search
+        </button>
       </div>
 
       {errandsLoading ? (
@@ -570,24 +743,44 @@ export default function AdminDashboard() {
                     </td>
                     <td style={{ padding: '12px', color: Colors.text, fontSize: '14px' }}>{new Date(errand.created_at).toLocaleDateString()}</td>
                     <td style={{ padding: '12px', textAlign: 'center' }}>
-                      <button
-                        onClick={() => {
-                          const reason = prompt('Enter cancellation reason:');
-                          if (reason) cancelErrandMutation.mutate({ id: errand.id, reason });
-                        }}
-                        style={{
-                          background: Colors.error,
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '4px',
-                          padding: '6px 12px',
-                          cursor: 'pointer',
-                          fontSize: '12px',
-                          fontWeight: '600',
-                        }}
-                      >
-                        Cancel
-                      </button>
+                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                        <button
+                          onClick={() => setSelectedErrand(errand)}
+                          style={{
+                            background: Colors.primary,
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            padding: '6px 10px',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                          }}
+                        >
+                          <Eye size={14} /> View
+                        </button>
+                        <button
+                          onClick={() => {
+                            const reason = prompt('Enter cancellation reason:');
+                            if (reason) cancelErrandMutation.mutate({ id: errand.id, reason });
+                          }}
+                          style={{
+                            background: Colors.error,
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            padding: '6px 12px',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            fontWeight: '600',
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -596,6 +789,99 @@ export default function AdminDashboard() {
           </div>
           <Pagination />
         </>
+      )}
+
+      {selectedErrand && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px',
+          overflowY: 'auto',
+        }}>
+          <div style={{
+            background: Colors.cardBackground,
+            border: `2px solid ${Colors.primary}`,
+            borderRadius: '12px',
+            padding: '24px',
+            maxWidth: '680px',
+            width: '100%',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            position: 'relative',
+          }}>
+            <button
+              onClick={() => setSelectedErrand(null)}
+              style={{
+                position: 'absolute',
+                top: '12px',
+                right: '12px',
+                background: 'transparent',
+                border: 'none',
+                fontSize: '24px',
+                cursor: 'pointer',
+                color: Colors.text,
+              }}
+            >
+              ✕
+            </button>
+
+            <h3 style={{ color: Colors.primary, marginBottom: '16px', fontSize: '20px', fontWeight: '700' }}>Errand Details</h3>
+
+            <div style={{ display: 'grid', gap: '12px' }}>
+              <div>
+                <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>ERRAND ID</p>
+                <p style={{ margin: '6px 0 0', color: Colors.text, fontFamily: 'monospace' }}>{selectedErrand.id}</p>
+              </div>
+              <div>
+                <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>TITLE</p>
+                <p style={{ margin: '6px 0 0', color: Colors.text, fontWeight: '600' }}>{selectedErrand.title || 'N/A'}</p>
+              </div>
+              <div>
+                <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>DESCRIPTION</p>
+                <p style={{ margin: '6px 0 0', color: Colors.text }}>{selectedErrand.description || 'N/A'}</p>
+              </div>
+              <div>
+                <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>LOCATION</p>
+                <p style={{ margin: '6px 0 0', color: Colors.text }}>{selectedErrand.location || 'N/A'}</p>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>AMOUNT</p>
+                  <p style={{ margin: '6px 0 0', color: Colors.text, fontWeight: '600' }}>{formatNaira(selectedErrand.budget)}</p>
+                </div>
+                <div>
+                  <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>STATUS</p>
+                  <p style={{ margin: '6px 0 0', color: Colors.text }}>{selectedErrand.status || 'N/A'}</p>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>POSTED BY</p>
+                  <p style={{ margin: '6px 0 0', color: Colors.text, fontFamily: 'monospace' }}>{selectedErrand.posted_by || 'N/A'}</p>
+                </div>
+                <div>
+                  <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>ASSIGNED TO</p>
+                  <p style={{ margin: '6px 0 0', color: Colors.text, fontFamily: 'monospace' }}>{selectedErrand.assigned_to || 'N/A'}</p>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>CREATED</p>
+                  <p style={{ margin: '6px 0 0', color: Colors.text }}>{new Date(selectedErrand.created_at).toLocaleString()}</p>
+                </div>
+                <div>
+                  <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>UPDATED</p>
+                  <p style={{ margin: '6px 0 0', color: Colors.text }}>{selectedErrand.updated_at ? new Date(selectedErrand.updated_at).toLocaleString() : 'N/A'}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -617,6 +903,7 @@ export default function AdminDashboard() {
                   <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Amount</th>
                   <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Status</th>
                   <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Date</th>
+                  <th style={{ padding: '12px', textAlign: 'center', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -638,6 +925,45 @@ export default function AdminDashboard() {
                       </span>
                     </td>
                     <td style={{ padding: '12px', color: Colors.text, fontSize: '14px' }}>{new Date(escrow.created_at).toLocaleDateString()}</td>
+                    <td style={{ padding: '12px', textAlign: 'center' }}>
+                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                        <button
+                          onClick={() => setSelectedEscrow(escrow)}
+                          style={{
+                            background: Colors.primary,
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            padding: '6px 10px',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                          }}
+                        >
+                          <Eye size={14} /> View
+                        </button>
+                        <button
+                          onClick={() => retryVerificationMutation.mutate(escrow.payment_reference)}
+                          disabled={!escrow.payment_reference || retryVerificationMutation.isPending}
+                          style={{
+                            background: !escrow.payment_reference ? Colors.muted : Colors.success,
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            padding: '6px 10px',
+                            cursor: !escrow.payment_reference ? 'not-allowed' : 'pointer',
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            opacity: retryVerificationMutation.isPending ? 0.7 : 1,
+                          }}
+                        >
+                          {retryVerificationMutation.isPending ? 'Retrying...' : 'Retry Verification'}
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -645,6 +971,129 @@ export default function AdminDashboard() {
           </div>
           <Pagination />
         </>
+      )}
+
+      {selectedEscrow && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px',
+          overflowY: 'auto',
+        }}>
+          <div style={{
+            background: Colors.cardBackground,
+            border: `2px solid ${Colors.primary}`,
+            borderRadius: '12px',
+            padding: '24px',
+            maxWidth: '680px',
+            width: '100%',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            position: 'relative',
+          }}>
+            <button
+              onClick={() => setSelectedEscrow(null)}
+              style={{
+                position: 'absolute',
+                top: '12px',
+                right: '12px',
+                background: 'transparent',
+                border: 'none',
+                fontSize: '24px',
+                cursor: 'pointer',
+                color: Colors.text,
+              }}
+            >
+              ✕
+            </button>
+
+            <h3 style={{ color: Colors.primary, marginBottom: '16px', fontSize: '20px', fontWeight: '700' }}>Payment Details</h3>
+
+            <div style={{ display: 'grid', gap: '12px' }}>
+              <div>
+                <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>ESCROW ID</p>
+                <p style={{ margin: '6px 0 0', color: Colors.text, fontFamily: 'monospace' }}>{selectedEscrow.id}</p>
+              </div>
+              <div>
+                <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>ERRAND ID</p>
+                <p style={{ margin: '6px 0 0', color: Colors.text, fontFamily: 'monospace' }}>{selectedEscrow.errand_id || 'N/A'}</p>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>CLIENT ID</p>
+                  <p style={{ margin: '6px 0 0', color: Colors.text, fontFamily: 'monospace' }}>{selectedEscrow.client_id || 'N/A'}</p>
+                </div>
+                <div>
+                  <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>RUNNER ID</p>
+                  <p style={{ margin: '6px 0 0', color: Colors.text, fontFamily: 'monospace' }}>{selectedEscrow.runner_id || 'N/A'}</p>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>AMOUNT</p>
+                  <p style={{ margin: '6px 0 0', color: Colors.text, fontWeight: '600' }}>{formatNaira(selectedEscrow.amount)}</p>
+                </div>
+                <div>
+                  <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>STATUS</p>
+                  <p style={{ margin: '6px 0 0', color: Colors.text }}>{selectedEscrow.status || 'N/A'}</p>
+                </div>
+              </div>
+              <div>
+                <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>PAYMENT REFERENCE</p>
+                <p style={{ margin: '6px 0 0', color: Colors.text, fontFamily: 'monospace' }}>{selectedEscrow.payment_reference || 'N/A'}</p>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>PAID AT</p>
+                  <p style={{ margin: '6px 0 0', color: Colors.text }}>{selectedEscrow.paid_at ? new Date(selectedEscrow.paid_at).toLocaleString() : 'N/A'}</p>
+                </div>
+                <div>
+                  <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>RELEASE AT</p>
+                  <p style={{ margin: '6px 0 0', color: Colors.text }}>{selectedEscrow.release_at ? new Date(selectedEscrow.release_at).toLocaleString() : 'N/A'}</p>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>CREATED</p>
+                  <p style={{ margin: '6px 0 0', color: Colors.text }}>{new Date(selectedEscrow.created_at).toLocaleString()}</p>
+                </div>
+                <div>
+                  <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>RUNNER STATUS</p>
+                  <p style={{ margin: '6px 0 0', color: Colors.text }}>{selectedEscrow.runner_status || 'N/A'}</p>
+                </div>
+              </div>
+              <div>
+                <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>CLIENT STATUS</p>
+                <p style={{ margin: '6px 0 0', color: Colors.text }}>{selectedEscrow.client_status || 'N/A'}</p>
+              </div>
+            </div>
+
+            <div style={{ marginTop: '16px' }}>
+              <button
+                onClick={() => retryVerificationMutation.mutate(selectedEscrow.payment_reference)}
+                disabled={!selectedEscrow.payment_reference || retryVerificationMutation.isPending}
+                style={{
+                  background: !selectedEscrow.payment_reference ? Colors.muted : Colors.success,
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '10px 14px',
+                  cursor: !selectedEscrow.payment_reference ? 'not-allowed' : 'pointer',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  opacity: retryVerificationMutation.isPending ? 0.7 : 1,
+                }}
+              >
+                {retryVerificationMutation.isPending ? 'Retrying...' : 'Retry Verification'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -830,6 +1279,8 @@ export default function AdminDashboard() {
                   <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Type</th>
                   <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Amount</th>
                   <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Status</th>
+                  <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Reference</th>
+                  <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Paystack ID</th>
                   <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Date</th>
                 </tr>
               </thead>
@@ -850,6 +1301,12 @@ export default function AdminDashboard() {
                       }}>
                         {tx.status}
                       </span>
+                    </td>
+                    <td style={{ padding: '12px', color: Colors.text, fontSize: '12px', fontFamily: 'monospace' }}>
+                      {tx.reference || '—'}
+                    </td>
+                    <td style={{ padding: '12px', color: Colors.text, fontSize: '12px', fontFamily: 'monospace' }}>
+                      {tx.paystack_transaction_id || '—'}
                     </td>
                     <td style={{ padding: '12px', color: Colors.text, fontSize: '14px' }}>{new Date(tx.created_at).toLocaleDateString()}</td>
                   </tr>
@@ -1749,6 +2206,7 @@ export default function AdminDashboard() {
                 setActiveTab(tab);
                 setCurrentPage(1);
                 setSearchQuery('');
+                setSearchInput('');
               }}
               style={{
                 padding: '10px 16px',

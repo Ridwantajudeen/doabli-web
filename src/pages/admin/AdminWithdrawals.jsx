@@ -27,6 +27,7 @@ export default function AdminWithdrawals() {
           amount,
           status,
           reference,
+          paystack_transfer_code,
           created_at,
           reviewed_by,
           reviewed_at,
@@ -271,6 +272,16 @@ export default function AdminWithdrawals() {
                   <ThemedText style={{ fontSize: '12px', fontFamily: 'monospace', opacity: 0.8 }}>
                     {withdrawal.reference}
                   </ThemedText>
+                  {withdrawal.paystack_transfer_code && (
+                    <>
+                      <ThemedText style={{ fontSize: '12px', opacity: 0.6, marginTop: '8px', marginBottom: '4px' }}>
+                        Paystack ID
+                      </ThemedText>
+                      <ThemedText style={{ fontSize: '12px', fontFamily: 'monospace', opacity: 0.8 }}>
+                        {withdrawal.paystack_transfer_code}
+                      </ThemedText>
+                    </>
+                  )}
                 </div>
 
                 {/* Rejection Reason (if rejected) */}

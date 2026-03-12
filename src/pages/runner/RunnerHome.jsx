@@ -22,7 +22,21 @@ export default function RunnerHome() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return data || [];
+      if (!data || data.length === 0) return [];
+
+      const errandIds = data.map((errand) => errand.id);
+      const { data: escrows, error: escrowError } = await supabase
+        .from('escrow')
+        .select('errand_id, status')
+        .in('errand_id', errandIds);
+
+      if (escrowError) throw escrowError;
+
+      const statusByErrand = new Map(
+        (escrows || []).map((escrow) => [escrow.errand_id, escrow.status])
+      );
+
+      return data.filter((errand) => statusByErrand.get(errand.id) !== 'pending_payment');
     },
   });
 

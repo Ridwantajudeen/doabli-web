@@ -105,6 +105,7 @@ export default function RunnerProfile() {
           amount,
           status,
           reference,
+          paystack_transfer_code,
           created_at,
           processed_at,
           escrow_id,
@@ -1587,6 +1588,11 @@ export default function RunnerProfile() {
                 <ThemedText style={{ fontSize: '11px', opacity: 0.5, display: 'block', fontFamily: 'monospace' }}>
                   Ref: {withdrawal.reference}
                 </ThemedText>
+                {withdrawal.paystack_transfer_code && (
+                  <ThemedText style={{ fontSize: '11px', opacity: 0.5, display: 'block', fontFamily: 'monospace' }}>
+                    Paystack ID: {withdrawal.paystack_transfer_code}
+                  </ThemedText>
+                )}
               </div>
             ))}
           </div>

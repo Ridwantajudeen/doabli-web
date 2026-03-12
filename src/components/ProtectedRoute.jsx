@@ -32,8 +32,8 @@ export default function ProtectedRoute({ children, requiredRole, allowIncomplete
     }
   }, [loading, profileLoading, user, profile, requiredRole, allowIncomplete, isProfileComplete, location.pathname, navigate]);
 
-  // Show loader while auth is still loading
-  if (loading || profileLoading) {
+  // Show loader only when we truly don't have a profile yet
+  if (loading || (profileLoading && !profile)) {
     return <ThemedLoader />;
   }
 

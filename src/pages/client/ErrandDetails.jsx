@@ -24,6 +24,17 @@ const STATUS_CONFIG = {
   disputed:        { color: '#ef4444', label: 'Disputed',         icon: <FiX />     },
 };
 
+const formatStatusLabel = (status) => {
+  if (!status) return 'Unknown';
+  const overrides = {
+    pending_payment: 'Pending Payment',
+  };
+  if (overrides[status]) return overrides[status];
+  return status
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+};
+
 export default function ErrandDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -633,6 +644,37 @@ export default function ErrandDetails() {
         )}
       </ThemedCard>
 
+      {/* Payment Details */}
+      {escrow && (
+        <ThemedCard style={{ marginBottom: '24px' }}>
+          <ThemedText
+            title
+            style={{ fontSize: '18px', fontWeight: '600', marginBottom: '12px', display: 'block' }}
+          >
+            Payment Details
+          </ThemedText>
+          <div style={{ marginBottom: '12px' }}>
+            <ThemedText style={{ fontSize: '12px', opacity: 0.6, marginBottom: '4px', display: 'block' }}>
+              Status
+            </ThemedText>
+            <ThemedText style={{ fontSize: '14px', fontWeight: '600', display: 'block' }}>
+              {formatStatusLabel(escrow.status)}
+            </ThemedText>
+          </div>
+          <div style={{ marginBottom: '8px' }}>
+            <ThemedText style={{ fontSize: '12px', opacity: 0.6, marginBottom: '4px', display: 'block' }}>
+              Payment ID
+            </ThemedText>
+            <ThemedText style={{ fontSize: '12px', fontFamily: 'monospace', opacity: 0.8, display: 'block' }}>
+              {escrow.payment_reference || '—'}
+            </ThemedText>
+          </div>
+          <ThemedText style={{ fontSize: '12px', opacity: 0.6, display: 'block' }}>
+            Share this ID with support if you have any payment issues.
+          </ThemedText>
+        </ThemedCard>
+      )}
+
       {/* Details */}
       <ThemedCard style={{ marginBottom: '24px' }}>
         <ThemedText
@@ -641,6 +683,15 @@ export default function ErrandDetails() {
         >
           Details
         </ThemedText>
+
+        <div style={{ marginBottom: '16px' }}>
+          <ThemedText style={{ fontSize: '12px', opacity: 0.6, marginBottom: '4px', display: 'block' }}>
+            Errand ID
+          </ThemedText>
+          <ThemedText style={{ fontSize: '13px', fontFamily: 'monospace', opacity: 0.8, display: 'block' }}>
+            {errand.id}
+          </ThemedText>
+        </div>
 
         <div style={{ marginBottom: '16px' }}>
           <ThemedText style={{ fontSize: '12px', opacity: 0.6, marginBottom: '4px', display: 'block' }}>
