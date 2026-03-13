@@ -27,6 +27,7 @@ import RunnerDashboard from './pages/RunnerDashboard';
 import JobDetails from './pages/runner/JobDetails';
 // Admin
 import AdminDashboard from './pages/admin/AdminDashboard';
+import AdminUserDetails from './pages/admin/AdminUserDetails';
 
 // Components
 import ProtectedRoute from './components/ProtectedRoute';
@@ -227,6 +228,14 @@ function App() {
                 element={
                   <ProtectedRoute requiredRole="admin">
                     <AdminDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/users/:id"
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <AdminUserDetails />
                   </ProtectedRoute>
                 }
               />

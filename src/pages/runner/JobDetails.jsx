@@ -8,7 +8,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { ThemedView, ThemedText, ThemedCard } from '../../components/ThemedComponents';
 import Button from '../../components/Button';
-import { FiArrowLeft, FiMapPin, FiClock, FiCheck, FiAlertTriangle, FiX, FiCamera, FiDollarSign, FiUser } from 'react-icons/fi';
+import { FiArrowLeft, FiMapPin, FiClock, FiCheck, FiAlertTriangle, FiX, FiCamera, FiDollarSign, FiUser, FiInfo } from 'react-icons/fi';
 import { fetchViewerContactAccess, updateOwnerContactShare } from '../../lib/contactAccess';
 
 export default function JobDetails() {
@@ -27,6 +27,62 @@ export default function JobDetails() {
   const [withdrawalStep, setWithdrawalStep] = useState('confirm'); // 'confirm' or 'processing'
   // Local flag to hide withdraw button after a request is submitted
   const [withdrawalSubmitted, setWithdrawalSubmitted] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(null);
+
+  const toggleInfo = (key) => {
+    setInfoOpen((prev) => (prev === key ? null : key));
+  };
+
+  const InfoTip = ({ tipKey, text, size = 12 }) => (
+    <span style={{ position: 'relative', display: 'inline-flex' }}>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          toggleInfo(tipKey);
+        }}
+        onBlur={() => setInfoOpen((prev) => (prev === tipKey ? null : prev))}
+        aria-label="More info"
+        style={{
+          background: '#f3f4f6',
+          border: '1px solid #d1d5db',
+          padding: '2px',
+          margin: 0,
+          cursor: 'pointer',
+          color: '#555555',
+          display: 'inline-flex',
+          alignItems: 'center',
+          borderRadius: '999px',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
+        }}
+      >
+        <FiInfo size={size} />
+      </button>
+      {infoOpen === tipKey && (
+        <span
+          role="tooltip"
+          style={{
+            position: 'absolute',
+            top: '120%',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: '#111827',
+            color: '#fff',
+            padding: '8px 10px',
+            borderRadius: '6px',
+            fontSize: '11px',
+            lineHeight: 1.3,
+            whiteSpace: 'normal',
+            width: '220px',
+            zIndex: 50,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+          }}
+        >
+          {text}
+        </span>
+      )}
+    </span>
+  );
 
   // Fetch job
   const { data: job, isLoading, error } = useQuery({
@@ -321,15 +377,17 @@ export default function JobDetails() {
   const calculateWithdrawalDetails = () => {
     if (!escrow) return null;
 
-    // ✅ FIX: Use the platform_fee already calculated by backend
-    // runner_earnings is already NET (fee already deducted)
-    const netAmount = Number(escrow.runner_earnings) || 0;
-    const platformFee = Number(escrow.platform_fee) || 0;
-    const grossAmount = netAmount + platformFee;  // Reconstruct gross for display
+    const grossAmount = Number(escrow.amount) || 0;
+    const platformFeeBase = grossAmount * 0.10;
+    const platformFeeVat = platformFeeBase * 0.075;
+    const platformFeeTotal = platformFeeBase; // VAT is covered by platform
+    const netAmount = grossAmount - platformFeeBase;
 
     return {
       grossAmount,
-      fee: platformFee,  // ✅ Use the fee from escrow, don't recalculate
+      platformFeeBase,
+      platformFeeVat,
+      fee: platformFeeTotal,
       netAmount,
     };
   };
@@ -742,7 +800,29 @@ export default function JobDetails() {
                     <span>₦{withdrawalDetails.grossAmount.toLocaleString()}</span>
                   </div>
                   <div style={{ fontSize: '12px', opacity: 0.8, display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                    <span>Platform fee (5%):</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      Platform fee (10%):
+                      <InfoTip
+                        tipKey="fee-summary"
+                        text="This platform fee helps cover operations. Paystack charges us processing fees, and we also pay the VAT on those fees from this platform fee."
+                        size={12}
+                      />
+                    </span>
+                    <span>₦{withdrawalDetails.platformFeeBase.toLocaleString()}</span>
+                  </div>
+                  <div style={{ fontSize: '12px', opacity: 0.8, display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      VAT (7.5% of fee, covered by Doabli):
+                      <InfoTip
+                        tipKey="vat-summary"
+                        text="VAT is a government tax. We are covering this VAT from our platform fee so you are not charged extra."
+                        size={12}
+                      />
+                    </span>
+                    <span style={{ opacity: 0.7 }}>₦{withdrawalDetails.platformFeeVat.toLocaleString()}</span>
+                  </div>
+                  <div style={{ fontSize: '12px', opacity: 0.8, display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span>Total fee:</span>
                     <span>₦{withdrawalDetails.fee.toLocaleString()}</span>
                   </div>
                   <div style={{
@@ -814,7 +894,31 @@ export default function JobDetails() {
                     <span>₦{withdrawalDetails.grossAmount.toLocaleString()}</span>
                   </div>
                   <div style={{ fontSize: '12px', opacity: 0.8, display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                    <span>Platform fee (5%):</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      Platform fee (10%):
+                      <span
+                        title="This platform fee helps cover operations. Paystack charges us processing fees, and we also pay the VAT on those fees from this platform fee."
+                        style={{ color: '#9ca3af', display: 'inline-flex' }}
+                      >
+                        <FiInfo size={12} />
+                      </span>
+                    </span>
+                    <span>₦{withdrawalDetails.platformFeeBase.toLocaleString()}</span>
+                  </div>
+                  <div style={{ fontSize: '12px', opacity: 0.8, display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      VAT (7.5% of fee, covered by Doabli):
+                      <span
+                        title="VAT is a government tax. We are covering this VAT from our platform fee so you are not charged extra."
+                        style={{ color: '#9ca3af', display: 'inline-flex' }}
+                      >
+                        <FiInfo size={12} />
+                      </span>
+                    </span>
+                    <span style={{ opacity: 0.7 }}>₦{withdrawalDetails.platformFeeVat.toLocaleString()}</span>
+                  </div>
+                  <div style={{ fontSize: '12px', opacity: 0.8, display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span>Total fee:</span>
                     <span>₦{withdrawalDetails.fee.toLocaleString()}</span>
                   </div>
                   <div style={{
@@ -1182,8 +1286,30 @@ export default function JobDetails() {
                         <span>₦{withdrawalDetails.grossAmount.toLocaleString()}</span>
                       </div>
 
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '14px', opacity: 0.7 }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          Platform Fee (10%):
+                          <InfoTip
+                            tipKey="fee-modal"
+                            text="This platform fee helps cover operations. Paystack charges us processing fees, and we also pay the VAT on those fees from this platform fee."
+                            size={14}
+                          />
+                        </span>
+                        <span>-₦{withdrawalDetails.platformFeeBase.toLocaleString()}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '14px', opacity: 0.7 }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          VAT (7.5% of fee, covered by Doabli):
+                          <InfoTip
+                            tipKey="vat-modal"
+                            text="VAT is a government tax. We are covering this VAT from our platform fee so you are not charged extra."
+                            size={14}
+                          />
+                        </span>
+                        <span style={{ opacity: 0.7 }}>₦{withdrawalDetails.platformFeeVat.toLocaleString()}</span>
+                      </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', fontSize: '14px', opacity: 0.7 }}>
-                        <span>Platform Fee (5%):</span>
+                        <span>Total Fee:</span>
                         <span>-₦{withdrawalDetails.fee.toLocaleString()}</span>
                       </div>
 

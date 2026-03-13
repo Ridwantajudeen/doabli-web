@@ -1,8 +1,9 @@
 //admin dashboard
 
 import { useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { Users, Package, DollarSign, AlertCircle, BarChart3, Settings, Search, Filter, MoreVertical, TrendingUp, ChevronLeft, ChevronRight, Check, X, Eye, UserCheck, UserCog, Briefcase, Activity, Wallet, ShieldAlert } from 'lucide-react';
+import { Users, Package, CreditCard, AlertCircle, Settings, Search, Filter, MoreVertical, TrendingUp, ChevronLeft, ChevronRight, Check, X, Eye, UserCheck, UserCog, Briefcase, Activity, ShieldAlert, Banknote, BanknoteArrowUp, BadgePercent } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import BrandLogo from '../../components/BrandLogo';
 import { useAuth } from '../../context/AuthContext';
@@ -14,10 +15,39 @@ import { getApiBase } from '../../lib/apiBase';
 export default function AdminDashboard() {
   const { Colors } = useTheme();
   const { profile, user, profileLoading } = useAuth();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchInput, setSearchInput] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [userSearchInput, setUserSearchInput] = useState('');
+  const [errandSearchQuery, setErrandSearchQuery] = useState('');
+  const [errandSearchInput, setErrandSearchInput] = useState('');
+  const [tabSearchInput, setTabSearchInput] = useState({
+    payments: '',
+    disputes: '',
+    transactions: '',
+    kyc: '',
+    'bank-accounts': '',
+  });
+  const [tabSearchQuery, setTabSearchQuery] = useState({
+    payments: '',
+    disputes: '',
+    transactions: '',
+    kyc: '',
+    'bank-accounts': '',
+  });
+  const [tabPages, setTabPages] = useState({
+    dashboard: 1,
+    users: 1,
+    errands: 1,
+    payments: 1,
+    disputes: 1,
+    transactions: 1,
+    kyc: 1,
+    'bank-accounts': 1,
+    withdrawals: 1,
+    analytics: 1,
+    settings: 1,
+  });
   const [pageSize, setPageSize] = useState(50);
   const [resolvingDispute, setResolvingDispute] = useState(null);
   const [reviewingKYC, setReviewingKYC] = useState(null);
@@ -34,6 +64,31 @@ export default function AdminDashboard() {
   const [selectedErrand, setSelectedErrand] = useState(null);
   const [selectedEscrow, setSelectedEscrow] = useState(null);
   const apiBase = getApiBase();
+
+  const getPageForTab = (tab) => tabPages?.[tab] || 1;
+  const setPageForTab = (tab, page) => {
+    setTabPages((prev) => ({ ...prev, [tab]: page }));
+  };
+
+  const usersPage = getPageForTab('users');
+  const errandsPage = getPageForTab('errands');
+  const paymentsPage = getPageForTab('payments');
+  const disputesPage = getPageForTab('disputes');
+  const transactionsPage = getPageForTab('transactions');
+  const kycPage = getPageForTab('kyc');
+  const bankAccountsPage = getPageForTab('bank-accounts');
+  const analyticsPage = getPageForTab('analytics');
+  const activePage = getPageForTab(activeTab);
+
+  const getTabSearchInput = (tab) => tabSearchInput?.[tab] || '';
+  const getTabSearchQuery = (tab) => tabSearchQuery?.[tab] || '';
+  const setTabSearchInputValue = (tab, value) => {
+    setTabSearchInput((prev) => ({ ...prev, [tab]: value }));
+  };
+  const applyTabSearch = (tab) => {
+    setTabSearchQuery((prev) => ({ ...prev, [tab]: (tabSearchInput?.[tab] || '').trim() }));
+    setPageForTab(tab, 1);
+  };
 
   // Define all hooks BEFORE any conditional returns (required by React Hooks Rules)
   const api = useCallback(async (path, opts = {}) => {
@@ -81,51 +136,56 @@ export default function AdminDashboard() {
 
   // Fetch data from backend with pagination
   const { data: usersData = { users: [], total: 0, page: 1 }, isLoading: usersLoading, refetch: refetchUsers } = useQuery({
-    queryKey: ['adminUsers', currentPage, searchQuery],
-    queryFn: () => api(`/admin/users?page=${currentPage}&limit=${pageSize}${searchQuery ? `&search=${searchQuery}` : ''}`),
+    queryKey: ['adminUsers', usersPage, userSearchQuery],
+    queryFn: () => api(`/admin/users?page=${usersPage}&limit=${pageSize}${userSearchQuery ? `&search=${encodeURIComponent(userSearchQuery)}` : ''}`),
     enabled: activeTab === 'users',
     staleTime: 1000 * 60 * 2, // 2 minutes
   });
 
   const { data: errandsData = { errands: [], total: 0, page: 1 }, isLoading: errandsLoading, refetch: refetchErrands } = useQuery({
-    queryKey: ['adminErrands', currentPage, searchQuery],
-    queryFn: () => api(`/admin/errands?page=${currentPage}&limit=${pageSize}${searchQuery ? `&search=${searchQuery}` : ''}`),
+    queryKey: ['adminErrands', errandsPage, errandSearchQuery],
+    queryFn: () => api(`/admin/errands?page=${errandsPage}&limit=${pageSize}${errandSearchQuery ? `&search=${encodeURIComponent(errandSearchQuery)}` : ''}`),
     enabled: activeTab === 'errands',
     staleTime: 1000 * 60 * 2, // 2 minutes
   });
 
   const { data: escrowsData = { escrows: [], total: 0, page: 1 }, isLoading: escrowsLoading, refetch: refetchEscrows } = useQuery({
-    queryKey: ['adminEscrows', currentPage],
-    queryFn: () => api(`/admin/escrows?page=${currentPage}&limit=${pageSize}`),
+    queryKey: ['adminEscrows', activeTab, activeTab === 'disputes' ? disputesPage : paymentsPage, getTabSearchQuery(activeTab)],
+    queryFn: () => {
+      const page = activeTab === 'disputes' ? disputesPage : paymentsPage;
+      const status = activeTab === 'disputes' ? 'disputed' : '';
+      const search = getTabSearchQuery(activeTab);
+      return api(`/admin/escrows?page=${page}&limit=${pageSize}${status ? `&status=${status}` : ''}${search ? `&search=${encodeURIComponent(search)}` : ''}`);
+    },
     enabled: activeTab === 'payments' || activeTab === 'disputes',
     staleTime: 1000 * 60 * 2, // 2 minutes
   });
 
   const { data: auditsData = { audits: [], total: 0, page: 1 }, isLoading: auditsLoading, refetch: refetchAudits } = useQuery({
-    queryKey: ['adminAudits', currentPage],
-    queryFn: () => api(`/admin/audits?page=${currentPage}&limit=${pageSize}`),
+    queryKey: ['adminAudits', analyticsPage],
+    queryFn: () => api(`/admin/audits?page=${analyticsPage}&limit=${pageSize}`),
     enabled: activeTab === 'analytics',
     staleTime: 1000 * 60 * 2, // 2 minutes
   });
 
   const { data: transactionsData = { transactions: [], total: 0, page: 1 }, isLoading: transactionsLoading, refetch: refetchTransactions } = useQuery({
-    queryKey: ['adminTransactions', currentPage],
-    queryFn: () => api(`/admin/transactions?page=${currentPage}&limit=${pageSize}`),
+    queryKey: ['adminTransactions', transactionsPage, getTabSearchQuery('transactions')],
+    queryFn: () => api(`/admin/transactions?page=${transactionsPage}&limit=${pageSize}${getTabSearchQuery('transactions') ? `&search=${encodeURIComponent(getTabSearchQuery('transactions'))}` : ''}`),
     enabled: activeTab === 'transactions',
     staleTime: 1000 * 60 * 2, // 2 minutes
   });
 
   // ✅ UPDATED: Fetch KYC with filter
   const { data: kycData = { kyc_requests: [], total: 0, page: 1 }, isLoading: kycLoading, refetch: refetchKYC } = useQuery({
-    queryKey: ['adminKYC', currentPage, kycFilter],
-    queryFn: () => api(`/admin/kyc?page=${currentPage}&limit=${pageSize}&status=${kycFilter === 'all' ? '' : kycFilter}`),
+    queryKey: ['adminKYC', kycPage, kycFilter, getTabSearchQuery('kyc')],
+    queryFn: () => api(`/admin/kyc?page=${kycPage}&limit=${pageSize}&status=${kycFilter === 'all' ? '' : kycFilter}${getTabSearchQuery('kyc') ? `&search=${encodeURIComponent(getTabSearchQuery('kyc'))}` : ''}`),
     enabled: activeTab === 'kyc',
     staleTime: 1000 * 60 * 2, // 2 minutes
   });
 
   const { data: bankAccountsData = { bank_accounts: [], total: 0, page: 1 }, isLoading: bankAccountsLoading, refetch: refetchBankAccounts } = useQuery({
-    queryKey: ['adminBankAccounts', currentPage, bankAccountFilter],
-    queryFn: () => api(`/admin/bank-accounts?page=${currentPage}&limit=${pageSize}&status=${bankAccountFilter === 'all' ? '' : bankAccountFilter}`),
+    queryKey: ['adminBankAccounts', bankAccountsPage, bankAccountFilter, getTabSearchQuery('bank-accounts')],
+    queryFn: () => api(`/admin/bank-accounts?page=${bankAccountsPage}&limit=${pageSize}&status=${bankAccountFilter === 'all' ? '' : bankAccountFilter}${getTabSearchQuery('bank-accounts') ? `&search=${encodeURIComponent(getTabSearchQuery('bank-accounts'))}` : ''}`),
     enabled: activeTab === 'bank-accounts',
     staleTime: 1000 * 60 * 2,
   });
@@ -136,9 +196,7 @@ export default function AdminDashboard() {
     enabled: activeTab === 'settings',
     staleTime: 1000 * 60 * 5, // 5 minutes - settings rarely change
     onSuccess: (data) => {
-      if (data && !systemSettings) {
-        setSystemSettings(data);
-      }
+      if (data) setSystemSettings(data);
     },
   });
 
@@ -210,8 +268,12 @@ export default function AdminDashboard() {
   const updateSettingsMutation = useMutation({
     mutationFn: async (settings) =>
       api('/admin/settings', { method: 'POST', body: JSON.stringify(settings) }),
-    onSuccess: () => {
-      refetchSettings();
+    onSuccess: (data) => {
+      if (data?.settings) {
+        setSystemSettings(data.settings);
+      } else {
+        refetchSettings();
+      }
       showSuccess('Settings updated successfully!');
     },
   });
@@ -251,9 +313,14 @@ export default function AdminDashboard() {
     return new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(amount || 0);
   };
 
-  const applySearch = () => {
-    setSearchQuery(searchInput.trim());
-    setCurrentPage(1);
+  const applyUserSearch = () => {
+    setUserSearchQuery(userSearchInput.trim());
+    setPageForTab('users', 1);
+  };
+
+  const applyErrandSearch = () => {
+    setErrandSearchQuery(errandSearchInput.trim());
+    setPageForTab('errands', 1);
   };
 
   // Get stats from API or default values
@@ -266,7 +333,21 @@ export default function AdminDashboard() {
     totalPayments: 0,
     revenue: 0,
     disputes: 0,
+    platformFeeBaseTotal: 0,
+    vatTotal: 0,
+    platformFeeTotal: 0,
+    runnerEarningsTotal: 0,
+    payoutsTotal: 0,
+    monthly: [],
   };
+
+  const feePct = stats.revenue > 0 ? (stats.platformFeeBaseTotal / stats.revenue) * 100 : 0;
+  const netProfit = stats.platformFeeBaseTotal || 0;
+  const monthly = Array.isArray(stats.monthly) ? stats.monthly : [];
+  const maxMonthlyValue = monthly.reduce((max, m) => {
+    const val = Math.max(m?.revenue || 0, m?.payouts || 0);
+    return Math.max(max, val);
+  }, 1);
 
   // Fetch signed URLs for KYC documents (only when reviewing)
   const { data: kycSignedUrlsData, isLoading: loadingSignedUrls } = useQuery({
@@ -315,7 +396,20 @@ export default function AdminDashboard() {
   };
 
   // Pagination helper
-  const totalPages = Math.ceil((activeTab === 'users' ? usersData.total : activeTab === 'errands' ? errandsData.total : activeTab === 'payments' ? escrowsData.total : activeTab === 'transactions' ? transactionsData.total : activeTab === 'kyc' ? kycData.total : auditsData.total) / pageSize);
+  const totalPages = Math.ceil((activeTab === 'users'
+    ? usersData.total
+    : activeTab === 'errands'
+      ? errandsData.total
+      : activeTab === 'payments' || activeTab === 'disputes'
+        ? escrowsData.total
+        : activeTab === 'transactions'
+          ? transactionsData.total
+          : activeTab === 'kyc'
+            ? kycData.total
+            : activeTab === 'bank-accounts'
+              ? bankAccountsData.total
+              : auditsData.total
+  ) / pageSize);
 
   // Component: StatCard
   const StatCard = ({ icon: Icon, label, value, subtext, color }) => (
@@ -345,16 +439,16 @@ export default function AdminDashboard() {
   const Pagination = () => (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '20px', padding: '0 16px' }}>
       <button
-        onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-        disabled={currentPage === 1}
+        onClick={() => setPageForTab(activeTab, Math.max(1, activePage - 1))}
+        disabled={activePage === 1}
         style={{
-          background: currentPage === 1 ? Colors.muted : Colors.primary,
+          background: activePage === 1 ? Colors.muted : Colors.primary,
           color: 'white',
           border: 'none',
           borderRadius: '8px',
           padding: '8px 12px',
-          cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
-          opacity: currentPage === 1 ? 0.5 : 1,
+          cursor: activePage === 1 ? 'not-allowed' : 'pointer',
+          opacity: activePage === 1 ? 0.5 : 1,
           display: 'flex',
           alignItems: 'center',
           gap: '4px',
@@ -363,19 +457,19 @@ export default function AdminDashboard() {
         <ChevronLeft size={16} /> Previous
       </button>
       <span style={{ color: Colors.text }}>
-        Page {currentPage} of {totalPages || 1}
+        Page {activePage} of {totalPages || 1}
       </span>
       <button
-        onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-        disabled={currentPage >= totalPages}
+        onClick={() => setPageForTab(activeTab, Math.min(totalPages, activePage + 1))}
+        disabled={activePage >= totalPages}
         style={{
-          background: currentPage >= totalPages ? Colors.muted : Colors.primary,
+          background: activePage >= totalPages ? Colors.muted : Colors.primary,
           color: 'white',
           border: 'none',
           borderRadius: '8px',
           padding: '8px 12px',
-          cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer',
-          opacity: currentPage >= totalPages ? 0.5 : 1,
+          cursor: activePage >= totalPages ? 'not-allowed' : 'pointer',
+          opacity: activePage >= totalPages ? 0.5 : 1,
           display: 'flex',
           alignItems: 'center',
           gap: '4px',
@@ -399,9 +493,13 @@ export default function AdminDashboard() {
             <StatCard icon={Briefcase} label="Clients" value={stats.totalClients} color="#06B6D4" />
             <StatCard icon={Package} label="Total Errands" value={stats.totalErrands} color={Colors.warning} />
             <StatCard icon={Activity} label="Active Errands" value={stats.activeErrands} color="#10B981" />
-            <StatCard icon={Wallet} label="Total Revenue" value={formatNaira(stats.revenue)} color={Colors.success} />
-            <StatCard icon={DollarSign} label="Total Payments" value={stats.totalPayments} color="#3B82F6" />
+            <StatCard icon={Banknote} label="Total Revenue" value={formatNaira(stats.revenue)} color={Colors.success} />
+            <StatCard icon={CreditCard} label="Total Payments" value={stats.totalPayments} color="#3B82F6" />
             <StatCard icon={ShieldAlert} label="Active Disputes" value={stats.disputes} color={Colors.error} />
+            <StatCard icon={BadgePercent} label="Platform Fees" value={formatNaira(stats.platformFeeBaseTotal)} color="#0EA5E9" />
+            <StatCard icon={AlertCircle} label="VAT (7.5%)" value={formatNaira(stats.vatTotal)} color="#F97316" />
+            <StatCard icon={BanknoteArrowUp} label="Paid Out" value={formatNaira(stats.payoutsTotal)} color="#F59E0B" />
+            <StatCard icon={TrendingUp} label="Net Profit" value={formatNaira(netProfit)} color="#22C55E" />
           </div>
           
           <div style={{ 
@@ -433,7 +531,56 @@ export default function AdminDashboard() {
                   {stats.totalPayments > 0 ? (stats.disputes / stats.totalPayments * 100).toFixed(1) : 0}%
                 </p>
               </div>
+              <div>
+                <p style={{ fontSize: '12px', color: Colors.muted, marginBottom: '4px' }}>Platform Fee %</p>
+                <p style={{ fontSize: '20px', fontWeight: '700', color: Colors.text }}>
+                  {feePct.toFixed(1)}%
+                </p>
+              </div>
             </div>
+          </div>
+
+          <div style={{
+            background: Colors.cardBackground,
+            border: `1px solid ${Colors.border}`,
+            borderRadius: '12px',
+            padding: '24px',
+            marginTop: '16px'
+          }}>
+            <h3 style={{ fontSize: '18px', fontWeight: '700', color: Colors.text, marginBottom: '16px' }}>
+              Revenue vs Payouts (Last 6 Months)
+            </h3>
+            {monthly.length === 0 ? (
+              <p style={{ color: Colors.muted }}>No data available</p>
+            ) : (
+              <>
+                <div style={{ display: 'flex', gap: '12px', marginBottom: '12px', fontSize: '12px', color: Colors.muted }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ width: '10px', height: '10px', background: Colors.primary, borderRadius: '2px', display: 'inline-block' }} />
+                    Revenue
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ width: '10px', height: '10px', background: Colors.warning, borderRadius: '2px', display: 'inline-block' }} />
+                    Payouts
+                  </div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${monthly.length}, minmax(60px, 1fr))`, gap: '12px', alignItems: 'end', height: '220px' }}>
+                  {monthly.map((m) => {
+                    const revPct = ((m.revenue || 0) / maxMonthlyValue) * 100;
+                    const payPct = ((m.payouts || 0) / maxMonthlyValue) * 100;
+                    return (
+                      <div key={m.month} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', height: '100%' }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', height: '100%' }}>
+                          <div style={{ width: '16px', height: `${revPct}%`, background: Colors.primary, borderRadius: '4px' }} />
+                          <div style={{ width: '16px', height: `${payPct}%`, background: Colors.warning, borderRadius: '4px' }} />
+                        </div>
+                        <div style={{ fontSize: '11px', color: Colors.muted }}>{m.month}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </div>
         </>
       )}
@@ -449,12 +596,12 @@ export default function AdminDashboard() {
           <input
             type="text"
             placeholder="Search by name, email, or user ID..."
-            value={searchInput}
+            value={userSearchInput}
             onChange={(e) => {
-              setSearchInput(e.target.value);
+              setUserSearchInput(e.target.value);
             }}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') applySearch();
+              if (e.key === 'Enter') applyUserSearch();
             }}
             style={{
               width: '100%',
@@ -469,7 +616,7 @@ export default function AdminDashboard() {
           />
         </div>
         <button
-          onClick={applySearch}
+          onClick={applyUserSearch}
           style={{
             background: Colors.primary,
             color: 'white',
@@ -526,7 +673,7 @@ export default function AdminDashboard() {
                     <td style={{ padding: '12px', textAlign: 'center' }}>
                       <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
                         <button
-                          onClick={() => setSelectedUser(user)}
+                          onClick={() => navigate(`/admin/users/${user.id}`)}
                           style={{
                             background: Colors.primary,
                             color: 'white',
@@ -582,7 +729,7 @@ export default function AdminDashboard() {
           overflowY: 'auto',
         }}>
           <div style={{
-            background: Colors.cardBackground,
+            background: '#ffffff',
             border: `2px solid ${Colors.primary}`,
             borderRadius: '12px',
             padding: '24px',
@@ -677,12 +824,12 @@ export default function AdminDashboard() {
           <input
             type="text"
             placeholder="Search by title or ID..."
-            value={searchInput}
+            value={errandSearchInput}
             onChange={(e) => {
-              setSearchInput(e.target.value);
+              setErrandSearchInput(e.target.value);
             }}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') applySearch();
+              if (e.key === 'Enter') applyErrandSearch();
             }}
             style={{
               width: '100%',
@@ -697,7 +844,7 @@ export default function AdminDashboard() {
           />
         </div>
         <button
-          onClick={applySearch}
+          onClick={applyErrandSearch}
           style={{
             background: Colors.primary,
             color: 'white',
@@ -811,7 +958,7 @@ export default function AdminDashboard() {
           overflowY: 'auto',
         }}>
           <div style={{
-            background: Colors.cardBackground,
+            background: '#ffffff',
             border: `2px solid ${Colors.primary}`,
             borderRadius: '12px',
             padding: '24px',
@@ -896,6 +1043,47 @@ export default function AdminDashboard() {
   // RENDER: Payments
   const renderPayments = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div style={{ display: 'flex', gap: '12px' }}>
+        <div style={{ flex: 1, position: 'relative' }}>
+          <Search size={16} style={{ position: 'absolute', left: '12px', top: '12px', color: Colors.muted }} />
+          <input
+            type="text"
+            placeholder="Search by errand ID, reference, client, or runner..."
+            value={getTabSearchInput('payments')}
+            onChange={(e) => {
+              setTabSearchInputValue('payments', e.target.value);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') applyTabSearch('payments');
+            }}
+            style={{
+              width: '100%',
+              paddingLeft: '36px',
+              padding: '10px 12px 10px 36px',
+              borderRadius: '8px',
+              border: `1px solid ${Colors.border}`,
+              background: Colors.cardBackground,
+              color: Colors.text,
+              fontSize: '14px',
+            }}
+          />
+        </div>
+        <button
+          onClick={() => applyTabSearch('payments')}
+          style={{
+            background: Colors.primary,
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            padding: '10px 16px',
+            cursor: 'pointer',
+            fontWeight: '600',
+            fontSize: '14px',
+          }}
+        >
+          Search
+        </button>
+      </div>
       {escrowsLoading ? (
         <p style={{ color: Colors.muted }}>Loading escrows...</p>
       ) : escrows.length === 0 ? (
@@ -993,7 +1181,7 @@ export default function AdminDashboard() {
           overflowY: 'auto',
         }}>
           <div style={{
-            background: Colors.cardBackground,
+            background: '#ffffff',
             border: `2px solid ${Colors.primary}`,
             borderRadius: '12px',
             padding: '24px',
@@ -1110,6 +1298,47 @@ export default function AdminDashboard() {
     const disputes = escrows.filter(e => e.status === 'disputed');
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <div style={{ flex: 1, position: 'relative' }}>
+            <Search size={16} style={{ position: 'absolute', left: '12px', top: '12px', color: Colors.muted }} />
+            <input
+              type="text"
+              placeholder="Search disputes by errand ID, reference, client, or runner..."
+              value={getTabSearchInput('disputes')}
+              onChange={(e) => {
+                setTabSearchInputValue('disputes', e.target.value);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') applyTabSearch('disputes');
+              }}
+              style={{
+                width: '100%',
+                paddingLeft: '36px',
+                padding: '10px 12px 10px 36px',
+                borderRadius: '8px',
+                border: `1px solid ${Colors.border}`,
+                background: Colors.cardBackground,
+                color: Colors.text,
+                fontSize: '14px',
+              }}
+            />
+          </div>
+          <button
+            onClick={() => applyTabSearch('disputes')}
+            style={{
+              background: Colors.primary,
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              padding: '10px 16px',
+              cursor: 'pointer',
+              fontWeight: '600',
+              fontSize: '14px',
+            }}
+          >
+            Search
+          </button>
+        </div>
         {escrowsLoading ? (
           <p style={{ color: Colors.muted }}>Loading disputes...</p>
         ) : disputes.length === 0 ? (
@@ -1169,7 +1398,7 @@ export default function AdminDashboard() {
             zIndex: 1000,
           }}>
             <div style={{
-              background: Colors.cardBackground,
+              background: '#ffffff',
               border: `2px solid ${Colors.primary}`,
               borderRadius: '12px',
               padding: '20px',
@@ -1273,6 +1502,47 @@ export default function AdminDashboard() {
   // RENDER: Transactions
   const renderTransactions = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div style={{ display: 'flex', gap: '12px' }}>
+        <div style={{ flex: 1, position: 'relative' }}>
+          <Search size={16} style={{ position: 'absolute', left: '12px', top: '12px', color: Colors.muted }} />
+          <input
+            type="text"
+            placeholder="Search by reference, user, escrow, or status..."
+            value={getTabSearchInput('transactions')}
+            onChange={(e) => {
+              setTabSearchInputValue('transactions', e.target.value);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') applyTabSearch('transactions');
+            }}
+            style={{
+              width: '100%',
+              paddingLeft: '36px',
+              padding: '10px 12px 10px 36px',
+              borderRadius: '8px',
+              border: `1px solid ${Colors.border}`,
+              background: Colors.cardBackground,
+              color: Colors.text,
+              fontSize: '14px',
+            }}
+          />
+        </div>
+        <button
+          onClick={() => applyTabSearch('transactions')}
+          style={{
+            background: Colors.primary,
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            padding: '10px 16px',
+            cursor: 'pointer',
+            fontWeight: '600',
+            fontSize: '14px',
+          }}
+        >
+          Search
+        </button>
+      </div>
       {transactionsLoading ? (
         <p style={{ color: Colors.muted }}>Loading transactions...</p>
       ) : (transactionsData.transactions || []).length === 0 ? (
@@ -1337,7 +1607,7 @@ export default function AdminDashboard() {
             key={status}
             onClick={() => {
               setKycFilter(status);
-              setCurrentPage(1);
+              setPageForTab('kyc', 1);
             }}
             style={{
               padding: '8px 16px',
@@ -1354,6 +1624,47 @@ export default function AdminDashboard() {
             {status.charAt(0).toUpperCase() + status.slice(1)}
           </button>
         ))}
+      </div>
+      <div style={{ display: 'flex', gap: '12px' }}>
+        <div style={{ flex: 1, position: 'relative' }}>
+          <Search size={16} style={{ position: 'absolute', left: '12px', top: '12px', color: Colors.muted }} />
+          <input
+            type="text"
+            placeholder="Search by name, email, doc number, or profile..."
+            value={getTabSearchInput('kyc')}
+            onChange={(e) => {
+              setTabSearchInputValue('kyc', e.target.value);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') applyTabSearch('kyc');
+            }}
+            style={{
+              width: '100%',
+              paddingLeft: '36px',
+              padding: '10px 12px 10px 36px',
+              borderRadius: '8px',
+              border: `1px solid ${Colors.border}`,
+              background: Colors.cardBackground,
+              color: Colors.text,
+              fontSize: '14px',
+            }}
+          />
+        </div>
+        <button
+          onClick={() => applyTabSearch('kyc')}
+          style={{
+            background: Colors.primary,
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            padding: '10px 16px',
+            cursor: 'pointer',
+            fontWeight: '600',
+            fontSize: '14px',
+          }}
+        >
+          Search
+        </button>
       </div>
 
       {kycLoading ? (
@@ -1437,7 +1748,7 @@ export default function AdminDashboard() {
           overflowY: 'auto',
         }}>
           <div style={{
-            background: 'rgba(255, 255, 255, 0.9)',
+            background: '#ffffff',
             border: `2px solid ${Colors.primary}`,
             borderRadius: '12px',
             padding: '24px',
@@ -1851,7 +2162,7 @@ export default function AdminDashboard() {
             key={status}
             onClick={() => {
               setBankAccountFilter(status);
-              setCurrentPage(1);
+              setPageForTab('bank-accounts', 1);
             }}
             style={{
               padding: '8px 16px',
@@ -1868,6 +2179,47 @@ export default function AdminDashboard() {
             {status.charAt(0).toUpperCase() + status.slice(1)}
           </button>
         ))}
+      </div>
+      <div style={{ display: 'flex', gap: '12px' }}>
+        <div style={{ flex: 1, position: 'relative' }}>
+          <Search size={16} style={{ position: 'absolute', left: '12px', top: '12px', color: Colors.muted }} />
+          <input
+            type="text"
+            placeholder="Search by account, bank, or runner..."
+            value={getTabSearchInput('bank-accounts')}
+            onChange={(e) => {
+              setTabSearchInputValue('bank-accounts', e.target.value);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') applyTabSearch('bank-accounts');
+            }}
+            style={{
+              width: '100%',
+              paddingLeft: '36px',
+              padding: '10px 12px 10px 36px',
+              borderRadius: '8px',
+              border: `1px solid ${Colors.border}`,
+              background: Colors.cardBackground,
+              color: Colors.text,
+              fontSize: '14px',
+            }}
+          />
+        </div>
+        <button
+          onClick={() => applyTabSearch('bank-accounts')}
+          style={{
+            background: Colors.primary,
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            padding: '10px 16px',
+            cursor: 'pointer',
+            fontWeight: '600',
+            fontSize: '14px',
+          }}
+        >
+          Search
+        </button>
       </div>
 
       {bankAccountsLoading ? (
@@ -1955,7 +2307,7 @@ export default function AdminDashboard() {
           overflowY: 'auto',
         }}>
           <div style={{
-            background: Colors.cardBackground,
+            background: '#ffffff',
             border: `2px solid ${Colors.primary}`,
             borderRadius: '12px',
             padding: '24px',
@@ -2211,9 +2563,7 @@ export default function AdminDashboard() {
               key={tab}
               onClick={() => {
                 setActiveTab(tab);
-                setCurrentPage(1);
-                setSearchQuery('');
-                setSearchInput('');
+                setPageForTab(tab, 1);
               }}
               style={{
                 padding: '10px 16px',

@@ -8,50 +8,52 @@ import { useTheme } from '../../context/ThemeContext';
 import { ThemedView, ThemedText, ThemedCard } from '../../components/ThemedComponents';
 import Button from '../../components/Button';
 import { FiDollarSign, FiCheck, FiX, FiClock, FiUser, FiCalendar } from 'react-icons/fi';
+import { getApiBase } from '../../lib/apiBase';
 
 export default function AdminWithdrawals() {
   const { theme, Colors } = useTheme();
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState('pending');
+  const [searchInput, setSearchInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(50);
+  const apiBase = getApiBase();
 
   // Fetch withdrawals
-  const { data: withdrawals = [], isLoading } = useQuery({
-    queryKey: ['admin-withdrawals', statusFilter],
+  const { data: withdrawalsData = { withdrawals: [], total: 0, page: 1 }, isLoading } = useQuery({
+    queryKey: ['admin-withdrawals', statusFilter, page, searchQuery],
     queryFn: async () => {
-      let query = supabase
-        .from('withdrawals')
-        .select(`
-          id,
-          profile_id,
-          bank_account_id,
-          amount,
-          status,
-          reference,
-          paystack_transfer_code,
-          created_at,
-          reviewed_by,
-          reviewed_at,
-          approved_at,
-          rejection_reason,
-          bank_accounts(bank_name, account_number, account_name),
-          profiles(id, first_name, last_name, email, kyc_verified)
-        `)
-        .order('created_at', { ascending: false });
-
-      if (statusFilter !== 'all') {
-        query = query.eq('status', statusFilter);
+      const token = (await supabase.auth.getSession()).data.session?.access_token || '';
+      const statusParam = statusFilter === 'all' ? '' : statusFilter;
+      const searchParam = searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : '';
+      const res = await fetch(
+        `${apiBase}/api/admin/withdrawals?page=${page}&limit=${pageSize}&status=${statusParam}${searchParam}`,
+        {
+          headers: {
+            Authorization: token ? `Bearer ${token}` : undefined,
+          },
+        }
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to fetch withdrawals');
       }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      return data || [];
+      return res.json();
     },
   });
+  const withdrawals = withdrawalsData.withdrawals || [];
+  const totalPages = Math.ceil((withdrawalsData.total || 0) / pageSize);
+
+  const applySearch = () => {
+    setSearchQuery(searchInput.trim());
+    setPage(1);
+  };
 
   // Approve withdrawal mutation
   const approveMutation = useMutation({
     mutationFn: async ({ id }) => {
-      const apiUrl = import.meta.env.VITE_API_URL || '';
+      const apiUrl = apiBase;
       const token = (await supabase.auth.getSession()).data.session?.access_token || '';
 
       const response = await fetch(`${apiUrl}/api/admin/withdrawals/${id}/approve`, {
@@ -81,7 +83,7 @@ export default function AdminWithdrawals() {
   // Reject withdrawal mutation
   const rejectMutation = useMutation({
     mutationFn: async ({ id, reason }) => {
-      const apiUrl = import.meta.env.VITE_API_URL || '';
+      const apiUrl = apiBase;
       const token = (await supabase.auth.getSession()).data.session?.access_token || '';
 
       const response = await fetch(`${apiUrl}/api/admin/withdrawals/${id}/reject`, {
@@ -160,7 +162,10 @@ export default function AdminWithdrawals() {
           {['all', 'pending', 'approved', 'rejected', 'success', 'failed'].map((status) => (
             <button
               key={status}
-              onClick={() => setStatusFilter(status)}
+              onClick={() => {
+                setStatusFilter(status);
+                setPage(1);
+              }}
               style={{
                 padding: '8px 16px',
                 borderRadius: '8px',
@@ -176,6 +181,43 @@ export default function AdminWithdrawals() {
               {status}
             </button>
           ))}
+        </div>
+        <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
+          <div style={{ flex: 1 }}>
+            <input
+              type="text"
+              placeholder="Search by reference or runner ID..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') applySearch();
+              }}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                borderRadius: '8px',
+                border: `1px solid ${Colors.border}`,
+                background: theme.uiBackground,
+                color: theme.text,
+                fontSize: '14px',
+              }}
+            />
+          </div>
+          <button
+            onClick={applySearch}
+            style={{
+              background: Colors.primary,
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              padding: '10px 16px',
+              cursor: 'pointer',
+              fontWeight: '600',
+              fontSize: '14px',
+            }}
+          >
+            Search
+          </button>
         </div>
 
         {/* Withdrawals List */}
@@ -335,6 +377,50 @@ export default function AdminWithdrawals() {
                 )}
               </ThemedCard>
             ))}
+          </div>
+        )}
+
+        {totalPages > 1 && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '20px', padding: '0 4px' }}>
+            <button
+              onClick={() => setPage(Math.max(1, page - 1))}
+              disabled={page === 1}
+              style={{
+                background: page === 1 ? Colors.muted : Colors.primary,
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '8px 12px',
+                cursor: page === 1 ? 'not-allowed' : 'pointer',
+                opacity: page === 1 ? 0.5 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+            >
+              Previous
+            </button>
+            <span style={{ color: Colors.text }}>
+              Page {page} of {totalPages}
+            </span>
+            <button
+              onClick={() => setPage(Math.min(totalPages, page + 1))}
+              disabled={page >= totalPages}
+              style={{
+                background: page >= totalPages ? Colors.muted : Colors.primary,
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '8px 12px',
+                cursor: page >= totalPages ? 'not-allowed' : 'pointer',
+                opacity: page >= totalPages ? 0.5 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+            >
+              Next
+            </button>
           </div>
         )}
       </div>
