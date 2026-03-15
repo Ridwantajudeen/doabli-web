@@ -7,6 +7,7 @@ import Button from '../components/Button';
 import { ThemedView, ThemedCard, ThemedText, ThemedTextInput } from '../components/ThemedComponents';
 import { friendlyMessage } from '../lib/notify';
 import BrandLogo from '../components/BrandLogo';
+import { isAdminRole } from '../lib/adminAccess';
 
 const GoogleIcon = ({ size = 18 }) => (
   <svg
@@ -92,7 +93,11 @@ export default function Login() {
         setPassword('');
 
         // Navigate to appropriate dashboard based on profile role
-        const dashboardRoute = profile?.role === 'runner' ? '/runner/home' : '/client/home';
+        const dashboardRoute = isAdminRole(profile?.role)
+          ? '/admin'
+          : profile?.role === 'runner'
+            ? '/runner/home'
+            : '/client/home';
         console.log('Navigating to:', dashboardRoute);
         navigate(dashboardRoute);
       }

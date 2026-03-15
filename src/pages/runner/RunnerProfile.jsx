@@ -12,11 +12,13 @@ import { FiEdit, FiX, FiLogOut, FiUser, FiCamera, FiCheckCircle, FiAlertCircle, 
 import { useNavigate } from 'react-router-dom';
 import KYCVerificationModal from '../../components/KYCVerificationModal';
 import { useQueryClient } from '@tanstack/react-query';
+import { getApiBase } from '../../lib/apiBase';
 
-export default function RunnerProfile() {
+export default function RunnerProfile({ onOpenSupport }) {
   const navigate = useNavigate();
   const { theme, Colors } = useTheme();
   const { user, profile, logout } = useAuth();
+  const apiBase = getApiBase();
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -27,6 +29,7 @@ export default function RunnerProfile() {
   const [showServicesModal, setShowServicesModal] = useState(false);
   const [editingServiceId, setEditingServiceId] = useState(null);
   const [serviceForm, setServiceForm] = useState({ title: '', description: '', price: '' });
+  const [serviceSubmitAttempted, setServiceSubmitAttempted] = useState(false);
 
   // Form fields
   const [bio, setBio] = useState('');
@@ -125,7 +128,6 @@ export default function RunnerProfile() {
   const { isLoading: banksLoading } = useQuery({
     queryKey: ['banks'],
     queryFn: async () => {
-      const apiBase = import.meta.env.VITE_API_URL || '';
       const response = await fetch(`${apiBase}/api/bank/list`);
       if (!response.ok) throw new Error('Failed to fetch banks');
       const data = await response.json();
@@ -168,14 +170,22 @@ export default function RunnerProfile() {
     queryKey: ['services', profile?.id],
     queryFn: async () => {
       if (!profile?.id) return [];
-      const { data, error } = await supabase
-        .from('services')
-        .select('*')
-        .eq('runner_id', profile.id)
-        .order('created_at', { ascending: false });
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('Authentication required');
 
-      if (error) throw error;
-      return data || [];
+      const res = await fetch(`${apiBase}/api/services/runner/${profile.id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to fetch services');
+      }
+
+      return await res.json();
     },
     enabled: !!profile?.id,
   });
@@ -183,34 +193,50 @@ export default function RunnerProfile() {
   // ✨ Create/Update service mutation
   const servicesMutation = useMutation({
     mutationFn: async (serviceData) => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('Authentication required');
+
+      const payload = {
+        runner_id: profile.id,
+        title: serviceData.title.trim(),
+        description: serviceData.description.trim(),
+        price: parseFloat(serviceData.price),
+      };
+
       if (editingServiceId) {
         // Update existing service
-        const { error } = await supabase
-          .from('services')
-          .update({
-            title: serviceData.title.trim(),
-            description: serviceData.description.trim(),
-            price: parseFloat(serviceData.price),
-          })
-          .eq('id', editingServiceId);
+        const res = await fetch(`${apiBase}/api/services/${editingServiceId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        });
 
-        if (error) throw error;
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || 'Failed to update service');
+        }
       } else {
         // Create new service
         if (services.length >= 5) {
           throw new Error('You can only add a maximum of 5 services');
         }
+        const res = await fetch(`${apiBase}/api/services`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        });
 
-        const { error } = await supabase
-          .from('services')
-          .insert({
-            runner_id: profile.id,
-            title: serviceData.title.trim(),
-            description: serviceData.description.trim(),
-            price: parseFloat(serviceData.price),
-          });
-
-        if (error) throw error;
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || 'Failed to create service');
+        }
       }
     },
     onSuccess: () => {
@@ -228,12 +254,25 @@ export default function RunnerProfile() {
   // ✨ Delete service mutation
   const deleteServiceMutation = useMutation({
     mutationFn: async (serviceId) => {
-      const { error } = await supabase
-        .from('services')
-        .delete()
-        .eq('id', serviceId);
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('Authentication required');
 
-      if (error) throw error;
+      const res = await fetch(`${apiBase}/api/services/${serviceId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          runner_id: profile.id,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to delete service');
+      }
     },
     onSuccess: () => {
       showSuccess('Service deleted successfully');
@@ -395,7 +434,6 @@ export default function RunnerProfile() {
   // Resolve account name mutation
   const resolveAccountMutation = useMutation({
     mutationFn: async ({ account_number, bank_code }) => {
-      const apiBase = import.meta.env.VITE_API_URL || '';
       const { data } = await supabase.auth.getSession();
       const token = data?.session?.access_token;
 
@@ -498,6 +536,7 @@ export default function RunnerProfile() {
   const handleAddService = () => {
     setEditingServiceId(null);
     setServiceForm({ title: '', description: '', price: '' });
+    setServiceSubmitAttempted(false);
     setShowServicesModal(true);
   };
 
@@ -508,10 +547,12 @@ export default function RunnerProfile() {
       description: service.description,
       price: service.price.toString(),
     });
+    setServiceSubmitAttempted(false);
     setShowServicesModal(true);
   };
 
   const handleSaveService = () => {
+    setServiceSubmitAttempted(true);
     if (!serviceForm.title.trim()) {
       showError('validation', 'Service title is required');
       return;
@@ -1684,6 +1725,15 @@ export default function RunnerProfile() {
         )}
 
         <Button
+          variant="secondary"
+          size="md"
+          onClick={() => onOpenSupport && onOpenSupport()}
+          style={{ width: '100%' }}
+        >
+          Contact Support
+        </Button>
+
+        <Button
           variant="primary"
           size="md"
           onClick={() => navigate('/runner/home')}
@@ -1764,6 +1814,25 @@ export default function RunnerProfile() {
                   onChange={(value) => setServiceForm({ ...serviceForm, title: value })}
                   style={{ width: '100%' }}
                 />
+                <ThemedText
+                  style={{
+                    fontSize: '11px',
+                    marginTop: '6px',
+                    display: 'block',
+                    color:
+                      serviceSubmitAttempted &&
+                      (serviceForm.title.trim().length < 3 || serviceForm.title.trim().length > 120)
+                        ? Colors.warning
+                        : theme.text,
+                    opacity:
+                      serviceSubmitAttempted &&
+                      (serviceForm.title.trim().length < 3 || serviceForm.title.trim().length > 120)
+                        ? 1
+                        : 0.6,
+                  }}
+                >
+                  {serviceForm.title.trim().length} / 120 (min 3)
+                </ThemedText>
               </div>
 
               <div>
@@ -1795,6 +1864,25 @@ export default function RunnerProfile() {
                     resize: 'vertical',
                   }}
                 />
+                <ThemedText
+                  style={{
+                    fontSize: '11px',
+                    marginTop: '6px',
+                    display: 'block',
+                    color:
+                      serviceSubmitAttempted &&
+                      (serviceForm.description.trim().length < 10 || serviceForm.description.trim().length > 2000)
+                        ? Colors.warning
+                        : theme.text,
+                    opacity:
+                      serviceSubmitAttempted &&
+                      (serviceForm.description.trim().length < 10 || serviceForm.description.trim().length > 2000)
+                        ? 1
+                        : 0.6,
+                  }}
+                >
+                  {serviceForm.description.trim().length} / 2000 (min 10)
+                </ThemedText>
               </div>
 
               <div>

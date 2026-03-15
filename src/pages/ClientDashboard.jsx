@@ -9,6 +9,7 @@ import ClientMyErrands from './client/ClientMyErrands';
 import ClientMessages from './client/ClientMessages';
 import ClientNotifications from './client/ClientNotifications';
 import ClientProfile from './client/ClientProfile';
+import Support from './Support';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useEffect } from 'react';
@@ -91,7 +92,8 @@ export default function ClientDashboard() {
       case 'errands':       return <ClientMyErrands />;
       case 'messages':      return <ClientMessages />;
       case 'notifications': return <ClientNotifications />;
-      case 'profile':       return <ClientProfile />;
+      case 'profile':       return <ClientProfile onOpenSupport={() => handleTabChange('support')} />;
+      case 'support':       return <Support />;
       default:              return <ClientHome />;
     }
   };

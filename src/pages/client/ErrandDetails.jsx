@@ -48,11 +48,13 @@ export default function ErrandDetails() {
   const [showDisputeModal, setShowDisputeModal] = useState(false);
   const [disputeDetails, setDisputeDetails] = useState('');
   const [disputeImage, setDisputeImage] = useState(null);
+  const [disputeSubmitAttempted, setDisputeSubmitAttempted] = useState(false);
   
   // Defense modal state (runner defense when dispute is open)
   const [showDefenseModal, setShowDefenseModal] = useState(false);
   const [defenseDetails, setDefenseDetails] = useState('');
   const [defenseImage, setDefenseImage] = useState(null);
+  const [defenseSubmitAttempted, setDefenseSubmitAttempted] = useState(false);
   
   // Completion image state
   const [completionImage, setCompletionImage] = useState(null);
@@ -106,7 +108,7 @@ export default function ErrandDetails() {
       if (error) throw error;
       return data;
     },
-    enabled: !!errand?.assigned_to,
+    enabled: !!errand?.assigned_to && !!errand?.status && !['posted', 'pending_payment'].includes(errand.status),
   });
 
   const { data: messagingAccess } = useQuery({
@@ -158,7 +160,7 @@ export default function ErrandDetails() {
   const { data: applications = [] } = useQuery({
     queryKey: ['applications', id],
     queryFn: async () => {
-      if (errand?.assigned_to) return [];
+      if (!errand || errand.status !== 'posted') return [];
       const { data, error } = await supabase
         .from('runner_applications')
         .select('*')
@@ -179,7 +181,7 @@ export default function ErrandDetails() {
         runner: runnerData?.find((r) => r.id === app.runner_id),
       }));
     },
-    enabled: !!errand && !errand.assigned_to,
+    enabled: !!errand && errand.status === 'posted',
   });
 
   // Fetch runner_application for direct-hire (to check if runner accepted)
@@ -333,35 +335,32 @@ export default function ErrandDetails() {
 
   // Submit review
   const [reviewData, setReviewData] = useState({ rating: 5, comment: '' });
+  const [reviewSubmitAttempted, setReviewSubmitAttempted] = useState(false);
   const reviewMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
-        .from('reviews')
-        .insert([
-          {
-            escrow_id: escrow.id,
-            client_id: profile?.id ?? user.id,
-            runner_id: runner?.id,
-            rating: reviewData.rating,
-            comment: reviewData.comment,
-          },
-        ]);
+      const token = (await supabase.auth.getSession()).data.session?.access_token;
+      if (!token) throw new Error('Authentication required');
 
-      if (error) throw error;
+      const response = await fetch(`${apiBase}/review/submit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          escrow_id: escrow.id,
+          client_id: profile?.id ?? user.id,
+          rating: reviewData.rating,
+          comment: reviewData.comment,
+        }),
+      });
 
-      // Update runner's average rating
-      const { data: reviews, error: fetchErr } = await supabase
-        .from('reviews')
-        .select('rating')
-        .eq('runner_id', runner?.id);
-
-      if (!fetchErr && reviews) {
-        const avgRating = reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length;
-        await supabase
-          .from('profiles')
-          .update({ average_rating: avgRating })
-          .eq('id', runner?.id);
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to submit review');
       }
+
+      return await response.json();
     },
     onSuccess: () => {
       showSuccess('Review submitted!');
@@ -449,6 +448,9 @@ export default function ErrandDetails() {
         throw new Error('Escrow data not loaded yet — please try again');
       }
 
+      const token = (await supabase.auth.getSession()).data.session?.access_token;
+      if (!token) throw new Error('Authentication required');
+
       // Ensure Paystack inline script is loaded
       if (!window.PaystackPop) {
         const script = document.createElement('script');
@@ -479,7 +481,11 @@ export default function ErrandDetails() {
             console.log('[Paystack callback] Payment complete, ref:', paystackRef);
 
             // Tell backend: "this Paystack reference belongs to this escrow"
-            fetch(`${apiBase}/api/pay/verify/${encodeURIComponent(paystackRef)}?escrow_id=${escrow.id}&errand_id=${id}&type=direct_hire_funding`)
+            fetch(`${apiBase}/api/pay/verify/${encodeURIComponent(paystackRef)}?escrow_id=${escrow.id}&errand_id=${id}&type=direct_hire_funding`, {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            })
               .then(async (verifyRes) => {
                 const verifyData = await verifyRes.json().catch(() => ({}));
                 if (verifyRes.ok && verifyData.success) {
@@ -1015,7 +1021,7 @@ export default function ErrandDetails() {
             </Button>
             <Button
               variant="warning"
-              onClick={() => setShowDisputeModal(true)}
+              onClick={() => { setDisputeSubmitAttempted(false); setShowDisputeModal(true); }}
               style={{ width: '100%' }}
             >
               Raise Dispute
@@ -1071,7 +1077,7 @@ export default function ErrandDetails() {
             alignItems: 'center',
             zIndex: 1000,
           }}
-          onClick={() => setShowDefenseModal(false)}
+          onClick={() => { setDefenseSubmitAttempted(false); setShowDefenseModal(false); }}
         >
           <ThemedCard
             style={{
@@ -1084,7 +1090,7 @@ export default function ErrandDetails() {
             onClick={(e) => e.stopPropagation()}
           >
             <button
-              onClick={() => setShowDefenseModal(false)}
+              onClick={() => { setDefenseSubmitAttempted(false); setShowDefenseModal(false); }}
               style={{
                 position: 'absolute',
                 top: '12px',
@@ -1148,6 +1154,25 @@ export default function ErrandDetails() {
                   boxSizing: 'border-box',
                 }}
               />
+              <ThemedText
+                style={{
+                  fontSize: '11px',
+                  marginTop: '6px',
+                  display: 'block',
+                  color:
+                    defenseSubmitAttempted &&
+                    (defenseDetails.trim().length < 3 || defenseDetails.trim().length > 2000)
+                      ? Colors.warning
+                      : Colors.text,
+                  opacity:
+                    defenseSubmitAttempted &&
+                    (defenseDetails.trim().length < 3 || defenseDetails.trim().length > 2000)
+                      ? 1
+                      : 0.6,
+                }}
+              >
+                {defenseDetails.trim().length} / 2000 (min 3)
+              </ThemedText>
             </div>
 
             <div style={{ marginBottom: '20px' }}>
@@ -1229,14 +1254,14 @@ export default function ErrandDetails() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <Button
                 variant="ghost"
-                onClick={() => setShowDefenseModal(false)}
+                onClick={() => { setDefenseSubmitAttempted(false); setShowDefenseModal(false); }}
                 style={{ width: '100%' }}
               >
                 Cancel
               </Button>
               <Button
                 variant="primary"
-                onClick={() => defendMutation.mutate()}
+                onClick={() => { setDefenseSubmitAttempted(true); defendMutation.mutate(); }}
                 disabled={defendMutation.isPending || !defenseDetails.trim()}
                 style={{ width: '100%' }}
               >
@@ -1248,7 +1273,7 @@ export default function ErrandDetails() {
       )}
 
       {/* Review Section */}
-      {escrow && (escrow.status === 'released' || escrow.status === 'withdrawn') && !escrow.review_submitted && (
+      {escrow && ['released', 'withdrawn', 'releasable'].includes(escrow.status) && escrow.client_status === 'confirmed' && !escrow.review_submitted && (
         <ThemedCard style={{ marginBottom: '24px' }}>
           <ThemedText
             title
@@ -1306,11 +1331,32 @@ export default function ErrandDetails() {
                 boxSizing: 'border-box',
               }}
             />
+            <ThemedText
+              style={{
+                fontSize: '11px',
+                marginTop: '6px',
+                display: 'block',
+                color:
+                  reviewSubmitAttempted &&
+                  reviewData.comment.trim().length > 0 &&
+                  (reviewData.comment.trim().length < 3 || reviewData.comment.trim().length > 2000)
+                    ? Colors.warning
+                    : theme.text,
+                opacity:
+                  reviewSubmitAttempted &&
+                  reviewData.comment.trim().length > 0 &&
+                  (reviewData.comment.trim().length < 3 || reviewData.comment.trim().length > 2000)
+                    ? 1
+                    : 0.6,
+              }}
+            >
+              {reviewData.comment.trim().length} / 2000 (min 3)
+            </ThemedText>
           </div>
 
           <Button
             variant="primary"
-            onClick={() => reviewMutation.mutate()}
+            onClick={() => { setReviewSubmitAttempted(true); reviewMutation.mutate(); }}
             disabled={reviewMutation.isPending}
             style={{ width: '100%' }}
           >
@@ -1397,7 +1443,7 @@ export default function ErrandDetails() {
             justifyContent: 'center',
             zIndex: 1000,
           }}
-          onClick={() => setShowDisputeModal(false)}
+          onClick={() => { setDisputeSubmitAttempted(false); setShowDisputeModal(false); }}
         >
           <ThemedCard
             style={{
@@ -1442,6 +1488,25 @@ export default function ErrandDetails() {
                   boxSizing: 'border-box',
                 }}
               />
+              <ThemedText
+                style={{
+                  fontSize: '11px',
+                  marginTop: '6px',
+                  display: 'block',
+                  color:
+                    disputeSubmitAttempted &&
+                    (disputeDetails.trim().length < 3 || disputeDetails.trim().length > 2000)
+                      ? Colors.warning
+                      : Colors.text,
+                  opacity:
+                    disputeSubmitAttempted &&
+                    (disputeDetails.trim().length < 3 || disputeDetails.trim().length > 2000)
+                      ? 1
+                      : 0.6,
+                }}
+              >
+                {disputeDetails.trim().length} / 2000 (min 3)
+              </ThemedText>
             </div>
 
             <div style={{ marginBottom: '16px' }}>
@@ -1478,6 +1543,7 @@ export default function ErrandDetails() {
                   setShowDisputeModal(false);
                   setDisputeDetails('');
                   setDisputeImage(null);
+                  setDisputeSubmitAttempted(false);
                 }}
                 style={{ width: '100%' }}
               >
@@ -1485,7 +1551,7 @@ export default function ErrandDetails() {
               </Button>
               <Button
                 variant="primary"
-                onClick={() => disputeMutation.mutate()}
+                onClick={() => { setDisputeSubmitAttempted(true); disputeMutation.mutate(); }}
                 disabled={disputeMutation.isPending || !disputeDetails.trim()}
                 style={{ width: '100%' }}
               >

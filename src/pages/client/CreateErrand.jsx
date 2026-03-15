@@ -28,6 +28,7 @@ export default function CreateErrand() {
 
   const [errors, setErrors] = useState({});
   const [isPaying, setIsPaying] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   // Mutation: initialize payment on server and redirect to Paystack
   const createMutation = useMutation({
@@ -37,6 +38,18 @@ export default function CreateErrand() {
       if (!token) throw new Error('Authentication required');
 
       const callbackUrl = `${window.location.origin}/paystack-return`;
+      const payload = {
+        title: formData.title,
+        description: formData.description,
+        location: formData.location,
+        price,
+        user_id: user.id,
+        email: user.email,
+        callback_url: callbackUrl,
+      };
+      if (runnerId) {
+        payload.runner_id = runnerId;
+      }
 
       const res = await fetch(`${apiBase}/api/errands/create-with-payment`, {
         method: 'POST',
@@ -44,27 +57,33 @@ export default function CreateErrand() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          title: formData.title,
-          description: formData.description,
-          location: formData.location,
-          price,
-          runner_id: runnerId || null,
-          user_id: user.id,
-          email: user.email,
-          callback_url: callbackUrl,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Failed to initialize payment');
+        const detail =
+          Array.isArray(err.details) && err.details.length
+            ? err.details[0].message
+            : null;
+        throw new Error(detail || err.error || 'Failed to initialize payment');
       }
 
       return await res.json();
     },
     onSuccess: (data) => {
       if (data?.payment_url) {
+        try {
+          const context = {
+            reference: data.reference,
+            escrow_id: data.escrow_id,
+            errand_id: data.errand_id,
+            type: runnerId ? 'direct_hire_funding' : 'errand_posting',
+          };
+          sessionStorage.setItem('paystack_context', JSON.stringify(context));
+        } catch {
+          // ignore storage errors
+        }
         setIsPaying(true);
         window.location.href = data.payment_url;
         return;
@@ -80,7 +99,12 @@ export default function CreateErrand() {
   const validateForm = () => {
     const newErrors = {};
     if (!formData.title.trim()) newErrors.title = 'Title is required';
-    if (!formData.description.trim()) newErrors.description = 'Description is required';
+    const trimmedDescription = formData.description.trim();
+    if (!trimmedDescription) {
+      newErrors.description = 'Description is required';
+    } else if (trimmedDescription.length < 20) {
+      newErrors.description = 'Description must be at least 20 characters';
+    }
     if (!formData.location.trim()) newErrors.location = 'Location is required';
     if (!formData.price || isNaN(parseFloat(formData.price)) || parseFloat(formData.price) <= 0) {
       newErrors.price = 'Valid price is required';
@@ -91,6 +115,7 @@ export default function CreateErrand() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    setSubmitAttempted(true);
     if (!validateForm()) return;
     createMutation.mutate();
   };
@@ -133,6 +158,17 @@ export default function CreateErrand() {
               onChange={(v) => { setFormData({ ...formData, title: v }); if (errors.title) setErrors({ ...errors, title: null }); }}
               error={errors.title}
             />
+            <ThemedText
+              style={{
+                fontSize: '12px',
+                marginTop: '6px',
+                display: 'block',
+                color: submitAttempted && (formData.title.trim().length < 3 || formData.title.trim().length > 120) ? Colors.warning : theme.text,
+                opacity: submitAttempted && (formData.title.trim().length < 3 || formData.title.trim().length > 120) ? 1 : 0.6,
+              }}
+            >
+              {formData.title.trim().length} / 120 (min 3)
+            </ThemedText>
           </div>
 
           {/* Description */}
@@ -163,6 +199,17 @@ export default function CreateErrand() {
                 {errors.description}
               </ThemedText>
             )}
+            <ThemedText
+              style={{
+                fontSize: '12px',
+                marginTop: '6px',
+                display: 'block',
+                color: submitAttempted && (formData.description.trim().length < 20 || formData.description.trim().length > 2000) ? Colors.warning : theme.text,
+                opacity: submitAttempted && (formData.description.trim().length < 20 || formData.description.trim().length > 2000) ? 1 : 0.6,
+              }}
+            >
+              {formData.description.trim().length} / 2000 (min 20)
+            </ThemedText>
           </div>
 
           {/* Location */}
@@ -174,6 +221,17 @@ export default function CreateErrand() {
               onChange={(v) => { setFormData({ ...formData, location: v }); if (errors.location) setErrors({ ...errors, location: null }); }}
               error={errors.location}
             />
+            <ThemedText
+              style={{
+                fontSize: '12px',
+                marginTop: '6px',
+                display: 'block',
+                color: submitAttempted && (formData.location.trim().length < 2 || formData.location.trim().length > 200) ? Colors.warning : theme.text,
+                opacity: submitAttempted && (formData.location.trim().length < 2 || formData.location.trim().length > 200) ? 1 : 0.6,
+              }}
+            >
+              {formData.location.trim().length} / 200 (min 2)
+            </ThemedText>
           </div>
 
           {/* Price */}

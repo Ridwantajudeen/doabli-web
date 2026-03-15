@@ -31,7 +31,7 @@ export function AuthProvider({ children }) {
     );
 
     try {
-      const { profile: fetched, error } = await Promise.race([getProfile(userId), timeoutPromise]);
+      const { profile: fetched, error } = await Promise.race([getProfile(userId, userEmail), timeoutPromise]);
 
       if (error) {
         console.error("Error fetching profile:", error);

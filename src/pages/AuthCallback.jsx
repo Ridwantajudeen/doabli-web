@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase, exchangeAuthCode } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { ThemedView, ThemedCard, ThemedText } from '../components/ThemedComponents';
+import { isAdminRole } from '../lib/adminAccess';
 
 export default function AuthCallback() {
   const navigate = useNavigate();
@@ -49,7 +50,11 @@ export default function AuthCallback() {
         return;
       }
 
-      const dashboardRoute = fetchedProfile.role === 'runner' ? '/runner/home' : '/client/home';
+      const dashboardRoute = isAdminRole(fetchedProfile.role)
+        ? '/admin'
+        : fetchedProfile.role === 'runner'
+          ? '/runner/home'
+          : '/client/home';
       navigate(dashboardRoute, { replace: true });
     };
 

@@ -8,10 +8,21 @@ export default function Footer() {
   const currentYear = new Date().getFullYear();
 
   const links = {
-    Product: ['Features', 'Pricing', 'Security', 'Roadmap'],
-    Company: ['About', 'Blog', 'Careers', 'Press'],
-    Legal: ['Privacy', 'Terms', 'Cookies', 'Licenses'],
-    Social: ['Twitter', 'LinkedIn', 'Instagram', 'GitHub'],
+    Product: [
+      { label: 'Features', href: '/#features' },
+      { label: 'How It Works', href: '/#how' },
+    ],
+    Company: [
+      { label: 'About', href: '/#how' },
+      { label: 'Contact', href: '/#contact' },
+    ],
+    Legal: [
+      { label: 'Privacy', href: '#' },
+      { label: 'Terms', href: '#' },
+    ],
+    Support: [
+      { label: 'support@doabli.com', href: 'mailto:support@doabli.com' },
+    ],
   };
 
   return (
@@ -42,12 +53,12 @@ export default function Footer() {
               </h4>
               <ul className="space-y-2">
                 {items.map((item) => (
-                  <li key={item}>
+                  <li key={item.label}>
                     <a
-                      href="#"
+                      href={item.href}
                       className="text-sm hover:opacity-100 opacity-75 transition-opacity"
                     >
-                      {item}
+                      {item.label}
                     </a>
                   </li>
                 ))}

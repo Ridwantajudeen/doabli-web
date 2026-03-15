@@ -11,6 +11,7 @@ import { FiEdit, FiX, FiLogOut, FiUser, FiCamera, FiArrowLeft, FiStar, FiCheck }
 import Avatar from '../../components/Avatar';
 import { useState, useEffect } from 'react';
 import { fetchMessagingAccess } from '../../lib/contactAccess';
+import { getApiBase } from '../../lib/apiBase';
 
 export default function RunnerProfile() {
   const { id: runnerId } = useParams();
@@ -21,6 +22,7 @@ export default function RunnerProfile() {
   const { theme, Colors } = useTheme();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const apiBase = getApiBase();
 
   // Direct hire state
   const [showDirectHireModal, setShowDirectHireModal] = useState(false);
@@ -31,6 +33,7 @@ export default function RunnerProfile() {
     location: '',
     proposed_price: ''
   });
+  const [directHireSubmitAttempted, setDirectHireSubmitAttempted] = useState(false);
 
   // Fetch runner profile
   const { data: runner, isLoading } = useQuery({
@@ -51,14 +54,22 @@ export default function RunnerProfile() {
   const { data: services = [] } = useQuery({
     queryKey: ['services', runnerId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('services')
-        .select('*')
-        .eq('runner_id', runnerId)
-        .order('created_at', { ascending: false });
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('Authentication required');
 
-      if (error) throw error;
-      return data || [];
+      const res = await fetch(`${apiBase}/api/services/runner/${runnerId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to fetch services');
+      }
+
+      return await res.json();
     },
   });
 
@@ -96,7 +107,6 @@ export default function RunnerProfile() {
   // Accept application
   const acceptMutation = useMutation({
     mutationFn: async () => {
-      const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000';
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
       if (!token) throw new Error('Authentication required');
@@ -141,7 +151,6 @@ export default function RunnerProfile() {
   // Direct hire mutation
   const directHireMutation = useMutation({
     mutationFn: async () => {
-      const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000';
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
       if (!token) throw new Error('Authentication required');
@@ -194,10 +203,12 @@ export default function RunnerProfile() {
       location: '',
       proposed_price: service.price || ''
     });
+    setDirectHireSubmitAttempted(false);
     setShowDirectHireModal(true);
   };
 
   const handleSendDirectHire = () => {
+    setDirectHireSubmitAttempted(true);
     if (!directHireForm.location.trim()) {
       showError('validation', 'Please provide a location for the errand');
       return;
@@ -565,6 +576,25 @@ export default function RunnerProfile() {
                   onChange={(value) => setDirectHireForm({ ...directHireForm, location: value })}
                   style={{ width: '100%' }}
                 />
+                <ThemedText
+                  style={{
+                    fontSize: '11px',
+                    marginTop: '6px',
+                    display: 'block',
+                    color:
+                      directHireSubmitAttempted &&
+                      (directHireForm.location.trim().length < 2 || directHireForm.location.trim().length > 200)
+                        ? Colors.warning
+                        : theme.text,
+                    opacity:
+                      directHireSubmitAttempted &&
+                      (directHireForm.location.trim().length < 2 || directHireForm.location.trim().length > 200)
+                        ? 1
+                        : 0.6,
+                  }}
+                >
+                  {directHireForm.location.trim().length} / 200 (min 2)
+                </ThemedText>
               </div>
 
               <div>
@@ -597,6 +627,27 @@ export default function RunnerProfile() {
                     overflowY: 'auto',
                   }}
                 />
+                <ThemedText
+                  style={{
+                    fontSize: '11px',
+                    marginTop: '6px',
+                    display: 'block',
+                    color:
+                      directHireSubmitAttempted &&
+                      directHireForm.description.trim().length > 0 &&
+                      (directHireForm.description.trim().length < 20 || directHireForm.description.trim().length > 2000)
+                        ? Colors.warning
+                        : theme.text,
+                    opacity:
+                      directHireSubmitAttempted &&
+                      directHireForm.description.trim().length > 0 &&
+                      (directHireForm.description.trim().length < 20 || directHireForm.description.trim().length > 2000)
+                        ? 1
+                        : 0.6,
+                  }}
+                >
+                  {directHireForm.description.trim().length} / 2000 (min 20)
+                </ThemedText>
               </div>
 
               <div style={{ backgroundColor: theme.background, padding: '12px', borderRadius: '8px' }}>

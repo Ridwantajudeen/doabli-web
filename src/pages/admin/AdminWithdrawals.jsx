@@ -50,9 +50,20 @@ export default function AdminWithdrawals() {
     setPage(1);
   };
 
+  const promptForPin = (actionLabel = 'continue') => {
+    const raw = window.prompt(`Enter admin PIN to ${actionLabel}:`);
+    if (raw === null) return null;
+    const cleaned = String(raw).trim().replace(/\D/g, '');
+    if (!/^\d{4,6}$/.test(cleaned)) {
+      showError('validation', 'PIN must be 4-6 digits');
+      return null;
+    }
+    return cleaned;
+  };
+
   // Approve withdrawal mutation
   const approveMutation = useMutation({
-    mutationFn: async ({ id }) => {
+    mutationFn: async ({ id, pin }) => {
       const apiUrl = apiBase;
       const token = (await supabase.auth.getSession()).data.session?.access_token || '';
 
@@ -62,6 +73,7 @@ export default function AdminWithdrawals() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
+        body: JSON.stringify({ pin }),
       });
 
       if (!response.ok) {
@@ -82,7 +94,7 @@ export default function AdminWithdrawals() {
 
   // Reject withdrawal mutation
   const rejectMutation = useMutation({
-    mutationFn: async ({ id, reason }) => {
+    mutationFn: async ({ id, reason, pin }) => {
       const apiUrl = apiBase;
       const token = (await supabase.auth.getSession()).data.session?.access_token || '';
 
@@ -92,7 +104,7 @@ export default function AdminWithdrawals() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ reason }),
+        body: JSON.stringify({ reason, pin }),
       });
 
       if (!response.ok) {
@@ -352,7 +364,9 @@ export default function AdminWithdrawals() {
                       variant="primary"
                       onClick={() => {
                         if (window.confirm('Approve this withdrawal?')) {
-                          approveMutation.mutate({ id: withdrawal.id });
+                          const pin = promptForPin('approve this withdrawal');
+                          if (!pin) return;
+                          approveMutation.mutate({ id: withdrawal.id, pin });
                         }
                       }}
                       disabled={approveMutation.isPending}
@@ -365,7 +379,9 @@ export default function AdminWithdrawals() {
                       onClick={() => {
                         const reason = window.prompt('Rejection reason:');
                         if (reason) {
-                          rejectMutation.mutate({ id: withdrawal.id, reason });
+                          const pin = promptForPin('reject this withdrawal');
+                          if (!pin) return;
+                          rejectMutation.mutate({ id: withdrawal.id, reason, pin });
                         }
                       }}
                       disabled={rejectMutation.isPending}

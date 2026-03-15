@@ -2,6 +2,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useEffect } from 'react';
 import { ThemedLoader } from '../components/ThemedComponents';
+import { isAdminRole } from '../lib/adminAccess';
 
 export default function ProtectedRoute({ children, requiredRole, allowIncomplete = false }) {
   const { user, profile, loading, profileLoading, isProfileComplete } = useAuth();
@@ -24,9 +25,14 @@ export default function ProtectedRoute({ children, requiredRole, allowIncomplete
 
     // Check role restriction if requiredRole is specified
     if (!loading && user && profile && requiredRole) {
-      if (profile.role !== requiredRole) {
-        // Redirect to appropriate dashboard based on role
-        const redirectPath = profile.role === 'runner' ? '/runner' : '/client';
+      const isAdmin = isAdminRole(profile.role);
+      if (requiredRole === 'admin') {
+        if (!isAdmin) {
+          const redirectPath = profile.role === 'runner' ? '/runner' : '/client';
+          navigate(redirectPath, { replace: true });
+        }
+      } else if (profile.role !== requiredRole) {
+        const redirectPath = isAdmin ? '/admin' : profile.role === 'runner' ? '/runner' : '/client';
         navigate(redirectPath, { replace: true });
       }
     }
@@ -42,8 +48,13 @@ export default function ProtectedRoute({ children, requiredRole, allowIncomplete
   }
 
   // Check if user has required role
-  if (user && requiredRole && profile && profile.role !== requiredRole) {
-    return null; // Redirect handled by useEffect
+  if (user && requiredRole && profile) {
+    const isAdmin = isAdminRole(profile.role);
+    if (requiredRole === 'admin') {
+      if (!isAdmin) return null;
+    } else if (profile.role !== requiredRole) {
+      return null;
+    }
   }
 
   // Render children if user is authenticated and role matches

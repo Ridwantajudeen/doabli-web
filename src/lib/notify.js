@@ -9,7 +9,7 @@ export function friendlyMessage(context, err) {
     return 'Network issue — please check your connection and try again.';
   }
 
-  if (low.includes('unauthorized') || low.includes('invalid token') || low.includes('invalid') || low.includes('401')) {
+  if (low.includes('unauthorized') || low.includes('invalid token') || low.includes('401') || low.includes('403')) {
     return 'Authentication failed — please sign in again.';
   }
 

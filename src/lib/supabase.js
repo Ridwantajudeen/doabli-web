@@ -148,6 +148,7 @@ export const createProfile = async (userId, profileData) => {
       .insert([
         {
           id: userId,
+          user_id: userId,
           email: profileData.email,
           first_name: profileData.firstName,
           last_name: profileData.lastName,
@@ -169,19 +170,60 @@ export const createProfile = async (userId, profileData) => {
   }
 };
 
-export const getProfile = async (userId) => {
+export const getProfile = async (userId, userEmail) => {
   try {
-    const { data, error } = await supabase
+    // Prefer legacy mapping: profiles.id === auth user id
+    const { data: byId, error: byIdError } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', userId)
       .single();
 
-    if (error && error.code !== 'PGRST116') {
-      throw new Error(error.message);
+    if (!byIdError && byId) {
+      return { profile: byId, error: null };
     }
 
-    return { profile: data || null, error: null };
+    if (byIdError && byIdError.code !== 'PGRST116') {
+      throw new Error(byIdError.message);
+    }
+
+    // Fallback: profiles.user_id mapping (if present)
+    const { data: byUserId, error: byUserIdError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (!byUserIdError && byUserId) {
+      return { profile: byUserId, error: null };
+    }
+
+    if (byUserIdError && byUserIdError.code !== 'PGRST116') {
+      throw new Error(byUserIdError.message);
+    }
+
+    // Try matching by email for existing profiles
+    if (userEmail) {
+      const { data: byEmail, error: byEmailError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('email', userEmail)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (byEmailError && byEmailError.code !== 'PGRST116') {
+        throw new Error(byEmailError.message);
+      }
+
+      if (byEmail) {
+        return { profile: byEmail, error: null };
+      }
+    }
+
+    return { profile: null, error: null };
   } catch (err) {
     return { profile: null, error: err.message };
   }
@@ -189,15 +231,28 @@ export const getProfile = async (userId) => {
 
 export const updateProfile = async (userId, updates) => {
   try {
+    // Prefer update by id (legacy mapping), fallback to user_id
     const { data, error } = await supabase
       .from('profiles')
       .update(updates)
       .eq('id', userId)
       .select();
 
-    if (error) throw new Error(error.message);
+    if (error && error.code !== 'PGRST116') throw new Error(error.message);
 
-    return { profile: data[0], error: null };
+    if (data && data.length > 0) {
+      return { profile: data[0], error: null };
+    }
+
+    const { data: byIdData, error: byIdError } = await supabase
+      .from('profiles')
+      .update(updates)
+      .eq('user_id', userId)
+      .select();
+
+    if (byIdError) throw new Error(byIdError.message);
+
+    return { profile: byIdData?.[0] || null, error: null };
   } catch (err) {
     return { profile: null, error: err.message };
   }

@@ -6,6 +6,7 @@ import { updateProfile } from '../lib/supabase';
 import Button from '../components/Button';
 import { ThemedView, ThemedCard, ThemedText, ThemedTextInput } from '../components/ThemedComponents';
 import BrandLogo from '../components/BrandLogo';
+import { isAdminRole } from '../lib/adminAccess';
 
 const roles = [
   { label: 'Client', value: 'client', description: 'I need errands done' },
@@ -37,7 +38,11 @@ export default function CompleteProfile() {
 
   useEffect(() => {
     if (profile && isProfileComplete(profile)) {
-      const dashboard = profile.role === 'runner' ? '/runner/home' : '/client/home';
+      const dashboard = isAdminRole(profile.role)
+        ? '/admin'
+        : profile.role === 'runner'
+          ? '/runner/home'
+          : '/client/home';
       navigate(dashboard, { replace: true });
     }
   }, [profile, isProfileComplete, navigate]);
@@ -77,7 +82,11 @@ export default function CompleteProfile() {
       }
 
       await loadProfile(user.id, user.email);
-      const dashboard = updated?.role === 'runner' ? '/runner/home' : '/client/home';
+      const dashboard = isAdminRole(updated?.role)
+        ? '/admin'
+        : updated?.role === 'runner'
+          ? '/runner/home'
+          : '/client/home';
       navigate(dashboard, { replace: true });
     } finally {
       setSaving(false);

@@ -8,6 +8,7 @@ import RunnerApplications from './runner/RunnerApplications';
 import RunnerMessages from './runner/RunnerMessages';
 import RunnerNotifications from './runner/RunnerNotifications';
 import RunnerProfile from './runner/RunnerProfile';
+import Support from './Support';
 import { Menu, X } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
@@ -87,7 +88,8 @@ export default function RunnerDashboard() {
       case 'applications':  return <RunnerApplications />;
       case 'messages':      return <RunnerMessages />;
       case 'notifications': return <RunnerNotifications />;
-      case 'profile':       return <RunnerProfile />;
+      case 'profile':       return <RunnerProfile onOpenSupport={() => handleTabChange('support')} />;
+      case 'support':       return <Support />;
       default:              return <RunnerHome />;
     }
   };

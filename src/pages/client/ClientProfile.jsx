@@ -9,7 +9,7 @@ import Button from '../../components/Button';
 import { useNavigate } from 'react-router-dom';
 import { FiEdit2, FiX, FiLogOut, FiCamera, FiUser } from 'react-icons/fi';
 
-export default function ClientProfile() {
+export default function ClientProfile({ onOpenSupport }) {
   const navigate = useNavigate();
   const { theme, Colors } = useTheme();
   const { user, profile, logout } = useAuth();
@@ -381,6 +381,15 @@ export default function ClientProfile() {
             {saving ? 'Saving...' : 'Save Changes'}
           </Button>
         )}
+
+        <Button
+          variant="secondary"
+          size="md"
+          onClick={() => onOpenSupport && onOpenSupport()}
+          style={{ width: '100%' }}
+        >
+          Contact Support
+        </Button>
 
         <Button
           variant="primary"

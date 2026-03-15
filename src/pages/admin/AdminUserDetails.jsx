@@ -1,12 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 import { showError, showSuccess } from '../../lib/notify';
 import { getApiBase } from '../../lib/apiBase';
 import Button from '../../components/Button';
 import { FiArrowLeft, FiMail, FiPhone, FiUser, FiShield, FiClock, FiSearch } from 'react-icons/fi';
+import { getAdminLevel } from '../../lib/adminAccess';
 
 const maskAccountNumber = (value) => {
   const str = String(value || '');
@@ -21,12 +23,17 @@ export default function AdminUserDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { Colors } = useTheme();
+  const { profile: adminProfile } = useAuth();
   const apiBase = getApiBase();
   const [activeSection, setActiveSection] = useState('overview');
   const [sectionSearch, setSectionSearch] = useState({});
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedType, setSelectedType] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
+
+  const adminLevel = getAdminLevel(adminProfile?.role);
+  const canSupport = adminLevel >= 1;
+  const canFinance = adminLevel >= 2;
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['adminUserDetails', id],
@@ -81,6 +88,17 @@ export default function AdminUserDetails() {
     return name || 'User';
   }, [profile]);
 
+  const promptForPin = useCallback((actionLabel = 'continue') => {
+    const raw = window.prompt(`Enter admin PIN to ${actionLabel}:`);
+    if (raw === null) return null;
+    const cleaned = String(raw).trim().replace(/\D/g, '');
+    if (!/^\d{4,6}$/.test(cleaned)) {
+      showError('validation', 'PIN must be 4-6 digits');
+      return null;
+    }
+    return cleaned;
+  }, []);
+
   if (isLoading) {
     return <div style={{ padding: '40px', color: Colors.muted }}>Loading user details...</div>;
   }
@@ -104,11 +122,11 @@ export default function AdminUserDetails() {
     { key: 'overview', label: 'Overview' },
     isClient ? { key: 'errands_posted', label: 'Errands Posted' } : null,
     isRunner ? { key: 'errands_assigned', label: 'Errands Assigned' } : null,
-    { key: 'escrows', label: 'Escrows' },
-    { key: 'transactions', label: 'Transactions' },
-    isRunner ? { key: 'withdrawals', label: 'Withdrawals' } : null,
-    { key: 'kyc_requests', label: 'KYC' },
-    { key: 'bank_accounts', label: 'Bank Accounts' },
+    canFinance ? { key: 'escrows', label: 'Escrows' } : null,
+    canFinance ? { key: 'transactions', label: 'Transactions' } : null,
+    canFinance && isRunner ? { key: 'withdrawals', label: 'Withdrawals' } : null,
+    canFinance ? { key: 'kyc_requests', label: 'KYC' } : null,
+    canFinance ? { key: 'bank_accounts', label: 'Bank Accounts' } : null,
     isRunner ? { key: 'reviews_as_runner', label: 'Reviews (Runner)' } : null,
     isClient ? { key: 'reviews_as_client', label: 'Reviews (Client)' } : null,
   ].filter(Boolean);
@@ -460,44 +478,52 @@ export default function AdminUserDetails() {
 
         <div style={{ background: Colors.cardBackground, border: `1px solid ${Colors.border}`, borderRadius: '12px', padding: '20px' }}>
           <h3 style={{ marginTop: 0, color: Colors.text }}>Actions</h3>
-          <Button
-            variant={profile.suspended ? 'primary' : 'warning'}
-            onClick={() => suspendMutation.mutate({ suspended: !profile.suspended })}
-            style={{ width: '100%', marginBottom: '10px' }}
-          >
-            {profile.suspended ? 'Unblock / Unsuspend' : 'Suspend'}
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => window.location.href = `mailto:${profile.email || ''}`}
-            style={{ width: '100%' }}
-            disabled={!profile.email}
-          >
-            <FiUser size={14} /> Assist via Email
-          </Button>
-          <div style={{ marginTop: '10px', display: 'grid', gap: '10px' }}>
-            <Button
-              variant="warning"
-              onClick={async () => {
-                if (!window.confirm('Force logout this user? This will temporarily block sessions.')) return;
-                await handleAction(() => adminFetch(`/api/admin/users/${profile.id}/force-logout`, {}));
-              }}
-              style={{ width: '100%' }}
-            >
-              Force Logout
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={async () => {
-                if (!window.confirm('Send password reset email to this user?')) return;
-                await handleAction(() => adminFetch(`/api/admin/users/${profile.id}/password-reset`, {}));
-              }}
-              style={{ width: '100%' }}
-              disabled={!profile.email}
-            >
-              Send Password Reset
-            </Button>
-          </div>
+          {canSupport ? (
+            <>
+              <Button
+                variant={profile.suspended ? 'primary' : 'warning'}
+                onClick={() => suspendMutation.mutate({ suspended: !profile.suspended })}
+                style={{ width: '100%', marginBottom: '10px' }}
+              >
+                {profile.suspended ? 'Unblock / Unsuspend' : 'Suspend'}
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => window.location.href = `mailto:${profile.email || ''}`}
+                style={{ width: '100%' }}
+                disabled={!profile.email}
+              >
+                <FiUser size={14} /> Assist via Email
+              </Button>
+              <div style={{ marginTop: '10px', display: 'grid', gap: '10px' }}>
+                <Button
+                  variant="warning"
+                  onClick={async () => {
+                    if (!window.confirm('Force logout this user? This will temporarily block sessions.')) return;
+                    await handleAction(() => adminFetch(`/api/admin/users/${profile.id}/force-logout`, {}));
+                  }}
+                  style={{ width: '100%' }}
+                >
+                  Force Logout
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={async () => {
+                    if (!window.confirm('Send password reset email to this user?')) return;
+                    await handleAction(() => adminFetch(`/api/admin/users/${profile.id}/password-reset`, {}));
+                  }}
+                  style={{ width: '100%' }}
+                  disabled={!profile.email}
+                >
+                  Send Password Reset
+                </Button>
+              </div>
+            </>
+          ) : (
+            <div style={{ color: Colors.muted, fontSize: '13px' }}>
+              You do not have access to user actions.
+            </div>
+          )}
         </div>
       </div>
 
@@ -542,6 +568,9 @@ export default function AdminUserDetails() {
           onAction={handleAction}
           actionLoading={actionLoading}
           adminFetch={adminFetch}
+          promptForPin={promptForPin}
+          canFinance={canFinance}
+          canSupport={canSupport}
         />
       )}
     </div>
@@ -617,7 +646,7 @@ function StatCard({ label, value }) {
   );
 }
 
-function DetailsModal({ type, item, onClose, onAction, actionLoading, adminFetch }) {
+function DetailsModal({ type, item, onClose, onAction, actionLoading, adminFetch, promptForPin, canFinance, canSupport }) {
   const { Colors } = useTheme();
   if (!item) return null;
   const safeItem = type === 'bank'
@@ -632,19 +661,23 @@ function DetailsModal({ type, item, onClose, onAction, actionLoading, adminFetch
 
   const renderActions = () => {
     if (type === 'errand') {
+      if (!canSupport) return null;
       return actionButton('Cancel Errand', async () => {
         const reason = window.prompt('Cancel reason (optional):') || '';
         await onAction(() => adminFetch(`/api/admin/errands/${item.id}/cancel`, { reason }));
       }, 'warning');
     }
     if (type === 'escrow') {
+      if (!canFinance) return null;
       const disabled = item.status !== 'pending_payment' || !item.payment_reference;
       return (
         <Button
           variant="primary"
           onClick={async () => {
             if (disabled) return;
-            await onAction(() => adminFetch('/api/admin/escrows/reconcile', { escrow_id: item.id, limit: 1 }));
+            const pin = promptForPin?.('reconcile this payment');
+            if (!pin) return;
+            await onAction(() => adminFetch('/api/admin/escrows/reconcile', { escrow_id: item.id, limit: 1, pin }));
           }}
           disabled={actionLoading || disabled}
           style={{ width: '100%' }}
@@ -654,20 +687,26 @@ function DetailsModal({ type, item, onClose, onAction, actionLoading, adminFetch
       );
     }
     if (type === 'withdrawal') {
+      if (!canFinance) return null;
       return (
         <div style={{ display: 'grid', gap: '8px' }}>
           {actionButton('Approve Withdrawal', async () => {
-            await onAction(() => adminFetch(`/api/admin/withdrawals/${item.id}/approve`, {}));
+            const pin = promptForPin?.('approve this withdrawal');
+            if (!pin) return;
+            await onAction(() => adminFetch(`/api/admin/withdrawals/${item.id}/approve`, { pin }));
           })}
           {actionButton('Reject Withdrawal', async () => {
             const reason = window.prompt('Rejection reason:');
             if (!reason) return;
-            await onAction(() => adminFetch(`/api/admin/withdrawals/${item.id}/reject`, { reason }));
+            const pin = promptForPin?.('reject this withdrawal');
+            if (!pin) return;
+            await onAction(() => adminFetch(`/api/admin/withdrawals/${item.id}/reject`, { reason, pin }));
           }, 'warning')}
         </div>
       );
     }
     if (type === 'kyc') {
+      if (!canFinance) return null;
       return (
         <div style={{ display: 'grid', gap: '8px' }}>
           {actionButton('Approve KYC', async () => {
@@ -682,6 +721,7 @@ function DetailsModal({ type, item, onClose, onAction, actionLoading, adminFetch
       );
     }
     if (type === 'bank') {
+      if (!canFinance) return null;
       return (
         <div style={{ display: 'grid', gap: '8px' }}>
           {actionButton('Approve Bank Account', async () => {

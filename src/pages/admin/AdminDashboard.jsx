@@ -1,9 +1,9 @@
 //admin dashboard
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { Users, Package, CreditCard, AlertCircle, Settings, Search, Filter, MoreVertical, TrendingUp, ChevronLeft, ChevronRight, Check, X, Eye, UserCheck, UserCog, Briefcase, Activity, ShieldAlert, Banknote, BanknoteArrowUp, BadgePercent } from 'lucide-react';
+import { Users, Package, CreditCard, AlertCircle, Settings, Search, Filter, MoreVertical, TrendingUp, ChevronLeft, ChevronRight, Check, X, Eye, UserCheck, UserCog, Briefcase, Activity, ShieldAlert, Banknote, BanknoteArrowUp, BadgePercent, Landmark, Lock, FileDown, UserCircle } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import BrandLogo from '../../components/BrandLogo';
 import { useAuth } from '../../context/AuthContext';
@@ -11,11 +11,19 @@ import { supabase } from '../../lib/supabase';
 import { showError, showSuccess } from '../../lib/notify';
 import AdminWithdrawals from './AdminWithdrawals';
 import { getApiBase } from '../../lib/apiBase';
+import { getAdminLevel, isAdminRole } from '../../lib/adminAccess';
 
 export default function AdminDashboard() {
   const { Colors } = useTheme();
   const { profile, user, profileLoading } = useAuth();
   const navigate = useNavigate();
+  const adminRole = profile?.role || null;
+  const adminLevel = getAdminLevel(adminRole);
+  const canSupport = adminLevel >= 1;
+  const canFinance = adminLevel >= 2;
+  const canSuper = adminLevel >= 3;
+  const canViewDisputes = canSupport;
+  const canResolveDisputes = canFinance;
   const [activeTab, setActiveTab] = useState('dashboard');
   const [userSearchQuery, setUserSearchQuery] = useState('');
   const [userSearchInput, setUserSearchInput] = useState('');
@@ -27,6 +35,7 @@ export default function AdminDashboard() {
     transactions: '',
     kyc: '',
     'bank-accounts': '',
+    support: '',
   });
   const [tabSearchQuery, setTabSearchQuery] = useState({
     payments: '',
@@ -34,9 +43,11 @@ export default function AdminDashboard() {
     transactions: '',
     kyc: '',
     'bank-accounts': '',
+    support: '',
   });
   const [tabPages, setTabPages] = useState({
     dashboard: 1,
+    financials: 1,
     users: 1,
     errands: 1,
     payments: 1,
@@ -45,6 +56,9 @@ export default function AdminDashboard() {
     kyc: 1,
     'bank-accounts': 1,
     withdrawals: 1,
+    support: 1,
+    'admin-activity': 1,
+    admins: 1,
     analytics: 1,
     settings: 1,
   });
@@ -63,6 +77,40 @@ export default function AdminDashboard() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [selectedErrand, setSelectedErrand] = useState(null);
   const [selectedEscrow, setSelectedEscrow] = useState(null);
+  const [supportFilter, setSupportFilter] = useState('open');
+  const [selectedSupport, setSelectedSupport] = useState(null);
+  const [supportReply, setSupportReply] = useState('');
+  const [auditFilterInput, setAuditFilterInput] = useState({
+    admin: '',
+    action: '',
+    targetType: '',
+    dateFrom: '',
+    dateTo: '',
+    search: '',
+  });
+  const [auditFilters, setAuditFilters] = useState({
+    admin: '',
+    action: '',
+    targetType: '',
+    dateFrom: '',
+    dateTo: '',
+    search: '',
+  });
+  const [adminSearchInput, setAdminSearchInput] = useState('');
+  const [adminSearchQuery, setAdminSearchQuery] = useState('');
+  const [financialsPinInput, setFinancialsPinInput] = useState('');
+  const [financialsPin, setFinancialsPin] = useState('');
+  const [financialsUnlocked, setFinancialsUnlocked] = useState(false);
+  const [financialsError, setFinancialsError] = useState('');
+  const [financialsData, setFinancialsData] = useState(null);
+  const [adminActivityPinInput, setAdminActivityPinInput] = useState('');
+  const [adminActivityPin, setAdminActivityPin] = useState('');
+  const [adminActivityUnlocked, setAdminActivityUnlocked] = useState(false);
+  const [adminActivityError, setAdminActivityError] = useState('');
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [pinSetup, setPinSetup] = useState({ current: '', next: '', confirm: '' });
+  const [pinSetupError, setPinSetupError] = useState('');
+  const [selectedAudit, setSelectedAudit] = useState(null);
   const apiBase = getApiBase();
 
   const getPageForTab = (tab) => tabPages?.[tab] || 1;
@@ -77,8 +125,40 @@ export default function AdminDashboard() {
   const transactionsPage = getPageForTab('transactions');
   const kycPage = getPageForTab('kyc');
   const bankAccountsPage = getPageForTab('bank-accounts');
+  const supportPage = getPageForTab('support');
+  const adminActivityPage = getPageForTab('admin-activity');
+  const adminsPage = getPageForTab('admins');
   const analyticsPage = getPageForTab('analytics');
   const activePage = getPageForTab(activeTab);
+
+  const tabConfig = useMemo(() => ([
+    { key: 'dashboard', label: 'Dashboard', show: true },
+    { key: 'financials', label: 'Financials', show: canFinance },
+    { key: 'users', label: 'Users', show: canSupport },
+    { key: 'errands', label: 'Errands', show: canSupport },
+    { key: 'payments', label: 'Payments', show: canFinance },
+    { key: 'disputes', label: 'Disputes', show: canViewDisputes },
+    { key: 'transactions', label: 'Transactions', show: canFinance },
+    { key: 'kyc', label: 'KYC', show: canFinance },
+    { key: 'bank-accounts', label: 'Bank Accounts', show: canFinance },
+    { key: 'withdrawals', label: 'Withdrawals', show: canFinance },
+    { key: 'support', label: 'Support', show: canSupport },
+    { key: 'admin-activity', label: 'Admin Activity', show: canSuper },
+    { key: 'admins', label: 'Admins', show: canSuper },
+    { key: 'analytics', label: 'Analytics', show: canSupport },
+    { key: 'settings', label: 'Settings', show: canSuper },
+  ]), [canFinance, canSupport, canSuper, canViewDisputes]);
+
+  const visibleTabs = useMemo(
+    () => tabConfig.filter((tab) => tab.show).map((tab) => tab.key),
+    [tabConfig]
+  );
+
+  useEffect(() => {
+    if (visibleTabs.length && !visibleTabs.includes(activeTab)) {
+      setActiveTab(visibleTabs[0]);
+    }
+  }, [activeTab, visibleTabs]);
 
   const getTabSearchInput = (tab) => tabSearchInput?.[tab] || '';
   const getTabSearchQuery = (tab) => tabSearchQuery?.[tab] || '';
@@ -138,14 +218,14 @@ export default function AdminDashboard() {
   const { data: usersData = { users: [], total: 0, page: 1 }, isLoading: usersLoading, refetch: refetchUsers } = useQuery({
     queryKey: ['adminUsers', usersPage, userSearchQuery],
     queryFn: () => api(`/admin/users?page=${usersPage}&limit=${pageSize}${userSearchQuery ? `&search=${encodeURIComponent(userSearchQuery)}` : ''}`),
-    enabled: activeTab === 'users',
+    enabled: activeTab === 'users' && canSupport,
     staleTime: 1000 * 60 * 2, // 2 minutes
   });
 
   const { data: errandsData = { errands: [], total: 0, page: 1 }, isLoading: errandsLoading, refetch: refetchErrands } = useQuery({
     queryKey: ['adminErrands', errandsPage, errandSearchQuery],
     queryFn: () => api(`/admin/errands?page=${errandsPage}&limit=${pageSize}${errandSearchQuery ? `&search=${encodeURIComponent(errandSearchQuery)}` : ''}`),
-    enabled: activeTab === 'errands',
+    enabled: activeTab === 'errands' && canSupport,
     staleTime: 1000 * 60 * 2, // 2 minutes
   });
 
@@ -157,21 +237,39 @@ export default function AdminDashboard() {
       const search = getTabSearchQuery(activeTab);
       return api(`/admin/escrows?page=${page}&limit=${pageSize}${status ? `&status=${status}` : ''}${search ? `&search=${encodeURIComponent(search)}` : ''}`);
     },
-    enabled: activeTab === 'payments' || activeTab === 'disputes',
+    enabled: (activeTab === 'payments' && canFinance) || (activeTab === 'disputes' && canViewDisputes),
     staleTime: 1000 * 60 * 2, // 2 minutes
   });
 
   const { data: auditsData = { audits: [], total: 0, page: 1 }, isLoading: auditsLoading, refetch: refetchAudits } = useQuery({
-    queryKey: ['adminAudits', analyticsPage],
-    queryFn: () => api(`/admin/audits?page=${analyticsPage}&limit=${pageSize}`),
-    enabled: activeTab === 'analytics',
+    queryKey: ['adminAudits', activeTab, adminActivityPage, analyticsPage, auditFilters, adminActivityPin],
+    queryFn: () => {
+      const page = activeTab === 'admin-activity' ? adminActivityPage : analyticsPage;
+      const params = new URLSearchParams({
+        page: String(page),
+        limit: String(pageSize),
+      });
+      if (auditFilters.admin) params.set('admin_id', auditFilters.admin);
+      if (auditFilters.action) params.set('action', auditFilters.action);
+      if (auditFilters.targetType) params.set('target_type', auditFilters.targetType);
+      if (auditFilters.dateFrom) params.set('date_from', auditFilters.dateFrom);
+      if (auditFilters.dateTo) params.set('date_to', auditFilters.dateTo);
+      if (auditFilters.search) params.set('search', auditFilters.search);
+      if (activeTab === 'admin-activity') params.set('scope', 'admin_activity');
+      return api(`/admin/audits?${params.toString()}`, {
+        headers: activeTab === 'admin-activity' && adminActivityPin
+          ? { 'x-admin-pin': adminActivityPin }
+          : undefined,
+      });
+    },
+    enabled: (activeTab === 'analytics' && canSupport) || (activeTab === 'admin-activity' && canSuper && adminActivityUnlocked),
     staleTime: 1000 * 60 * 2, // 2 minutes
   });
 
   const { data: transactionsData = { transactions: [], total: 0, page: 1 }, isLoading: transactionsLoading, refetch: refetchTransactions } = useQuery({
     queryKey: ['adminTransactions', transactionsPage, getTabSearchQuery('transactions')],
     queryFn: () => api(`/admin/transactions?page=${transactionsPage}&limit=${pageSize}${getTabSearchQuery('transactions') ? `&search=${encodeURIComponent(getTabSearchQuery('transactions'))}` : ''}`),
-    enabled: activeTab === 'transactions',
+    enabled: activeTab === 'transactions' && canFinance,
     staleTime: 1000 * 60 * 2, // 2 minutes
   });
 
@@ -179,25 +277,55 @@ export default function AdminDashboard() {
   const { data: kycData = { kyc_requests: [], total: 0, page: 1 }, isLoading: kycLoading, refetch: refetchKYC } = useQuery({
     queryKey: ['adminKYC', kycPage, kycFilter, getTabSearchQuery('kyc')],
     queryFn: () => api(`/admin/kyc?page=${kycPage}&limit=${pageSize}&status=${kycFilter === 'all' ? '' : kycFilter}${getTabSearchQuery('kyc') ? `&search=${encodeURIComponent(getTabSearchQuery('kyc'))}` : ''}`),
-    enabled: activeTab === 'kyc',
+    enabled: activeTab === 'kyc' && canFinance,
     staleTime: 1000 * 60 * 2, // 2 minutes
   });
 
   const { data: bankAccountsData = { bank_accounts: [], total: 0, page: 1 }, isLoading: bankAccountsLoading, refetch: refetchBankAccounts } = useQuery({
     queryKey: ['adminBankAccounts', bankAccountsPage, bankAccountFilter, getTabSearchQuery('bank-accounts')],
     queryFn: () => api(`/admin/bank-accounts?page=${bankAccountsPage}&limit=${pageSize}&status=${bankAccountFilter === 'all' ? '' : bankAccountFilter}${getTabSearchQuery('bank-accounts') ? `&search=${encodeURIComponent(getTabSearchQuery('bank-accounts'))}` : ''}`),
-    enabled: activeTab === 'bank-accounts',
+    enabled: activeTab === 'bank-accounts' && canFinance,
+    staleTime: 1000 * 60 * 2,
+  });
+
+  const { data: supportData = { messages: [], total: 0, page: 1 }, isLoading: supportLoading, refetch: refetchSupport } = useQuery({
+    queryKey: ['adminSupport', supportPage, supportFilter, getTabSearchQuery('support')],
+    queryFn: () => api(`/admin/support/messages?page=${supportPage}&limit=${pageSize}${supportFilter && supportFilter !== 'all' ? `&status=${supportFilter}` : ''}${getTabSearchQuery('support') ? `&search=${encodeURIComponent(getTabSearchQuery('support'))}` : ''}`),
+    enabled: activeTab === 'support' && canSupport,
+    staleTime: 1000 * 60 * 2,
+  });
+
+  const { data: adminsData = { admins: [], total: 0, page: 1 }, isLoading: adminsLoading, refetch: refetchAdmins } = useQuery({
+    queryKey: ['adminAdmins', adminsPage, adminSearchQuery],
+    queryFn: () => api(`/admin/admins?page=${adminsPage}&limit=${pageSize}${adminSearchQuery ? `&search=${encodeURIComponent(adminSearchQuery)}` : ''}`),
+    enabled: (activeTab === 'admins' || activeTab === 'admin-activity') && canSuper,
     staleTime: 1000 * 60 * 2,
   });
 
   const { data: settingsDataFromAPI, isLoading: settingsLoading, refetch: refetchSettings } = useQuery({
     queryKey: ['adminSettings'],
     queryFn: () => api('/admin/settings'),
-    enabled: activeTab === 'settings',
+    enabled: activeTab === 'settings' && canSuper,
     staleTime: 1000 * 60 * 5, // 5 minutes - settings rarely change
     onSuccess: (data) => {
       if (data) setSystemSettings(data);
     },
+  });
+
+  const { data: pinStatusData, isLoading: pinStatusLoading, refetch: refetchPinStatus } = useQuery({
+    queryKey: ['adminPinStatus'],
+    queryFn: () => api('/admin/security/pin-status'),
+    enabled: (['financials', 'settings', 'analytics', 'admin-activity'].includes(activeTab) || profileMenuOpen) && canFinance,
+    staleTime: 1000 * 60, // 1 minute
+  });
+
+  const pinStatus = pinStatusData || null;
+
+  const { data: supportDetailData, isLoading: supportDetailLoading, refetch: refetchSupportDetail } = useQuery({
+    queryKey: ['adminSupportDetail', selectedSupport?.id],
+    queryFn: () => api(`/admin/support/messages/${selectedSupport.id}`),
+    enabled: !!selectedSupport?.id && canSupport,
+    staleTime: 0,
   });
 
   // Mutations
@@ -220,8 +348,8 @@ export default function AdminDashboard() {
   });
 
   const resolveDisputeMutation = useMutation({
-    mutationFn: async ({ id, resolution, admin_notes }) =>
-      api(`/admin/escrows/${id}/resolve`, { method: 'POST', body: JSON.stringify({ resolution, admin_notes }) }),
+    mutationFn: async ({ id, resolution, admin_notes, pin }) =>
+      api(`/admin/escrows/${id}/resolve`, { method: 'POST', body: JSON.stringify({ resolution, admin_notes, pin }) }),
     onSuccess: () => {
       refetchEscrows();
       refetchStats();
@@ -231,12 +359,13 @@ export default function AdminDashboard() {
   });
 
   const reconcilePendingMutation = useMutation({
-    mutationFn: async (escrow) => api('/admin/escrows/reconcile', {
+    mutationFn: async ({ escrow, pin }) => api('/admin/escrows/reconcile', {
       method: 'POST',
       body: JSON.stringify({
         escrow_id: escrow?.id || null,
         reference: escrow?.payment_reference || null,
         limit: 1,
+        pin,
       }),
     }),
     onSuccess: (data) => {
@@ -278,6 +407,84 @@ export default function AdminDashboard() {
     },
   });
 
+  const updateAdminRoleMutation = useMutation({
+    mutationFn: async ({ id, role, pin }) =>
+      api(`/admin/admins/${id}/role`, { method: 'POST', body: JSON.stringify({ role, pin }) }),
+    onSuccess: () => {
+      showSuccess('Admin role updated');
+      refetchAdmins();
+      refetchAudits();
+    },
+    onError: (err) => {
+      showError('admin-role', err);
+    },
+  });
+
+  const suspendAdminMutation = useMutation({
+    mutationFn: async ({ id, suspended, reason, duration_days }) =>
+      api(`/admin/admins/${id}/suspend`, { method: 'POST', body: JSON.stringify({ suspended, reason, duration_days }) }),
+    onSuccess: () => {
+      showSuccess('Admin status updated');
+      refetchAdmins();
+      refetchAudits();
+    },
+    onError: (err) => {
+      showError('admin-suspend', err);
+    },
+  });
+
+  const setAdminPinMutation = useMutation({
+    mutationFn: async ({ current_pin, new_pin, confirm_pin }) =>
+      api('/admin/security/pin', {
+        method: 'POST',
+        body: JSON.stringify({ current_pin, new_pin, confirm_pin }),
+      }),
+    onSuccess: () => {
+      showSuccess('Admin PIN updated successfully!');
+      setPinSetup({ current: '', next: '', confirm: '' });
+      setPinSetupError('');
+      refetchPinStatus();
+    },
+    onError: (err) => {
+      let message = err?.message || 'Failed to update PIN';
+      try {
+        const parsed = JSON.parse(message);
+        if (parsed?.error) message = parsed.error;
+      } catch (_) {
+        // ignore JSON parse errors
+      }
+      setPinSetupError(message);
+      showError('admin-pin', message);
+    },
+  });
+
+  const verifyAdminPinMutation = useMutation({
+    mutationFn: async (pin) => {
+      if (!pin) throw new Error('PIN required');
+      return api('/admin/security/verify-pin', {
+        method: 'POST',
+        body: JSON.stringify({ pin }),
+      });
+    },
+    onSuccess: (_, pin) => {
+      setAdminActivityUnlocked(true);
+      setAdminActivityPin(pin);
+      setAdminActivityPinInput('');
+      setAdminActivityError('');
+    },
+    onError: (err) => {
+      let message = err?.message || 'Failed to verify PIN';
+      try {
+        const parsed = JSON.parse(message);
+        if (parsed?.error) message = parsed.error;
+      } catch (_) {
+        // ignore JSON parse errors
+      }
+      setAdminActivityError(message);
+      setAdminActivityUnlocked(false);
+    },
+  });
+
   const reviewBankAccountMutation = useMutation({
     mutationFn: async ({ id, status, rejected_reason, admin_notes }) => {
       try {
@@ -308,9 +515,302 @@ export default function AdminDashboard() {
     },
   });
 
+  const replySupportMutation = useMutation({
+    mutationFn: async ({ id, reply }) =>
+      api(`/admin/support/messages/${id}/reply`, { method: 'POST', body: JSON.stringify({ reply }) }),
+    onSuccess: () => {
+      showSuccess('Reply sent');
+      refetchSupport();
+      refetchSupportDetail();
+      setSupportReply('');
+    },
+    onError: (err) => {
+      showError('support-reply', err);
+    },
+  });
+
+  const verifyFinancialsMutation = useMutation({
+    mutationFn: async (pin) => {
+      if (!pin) throw new Error('PIN required');
+      return api('/admin/financials', {
+        method: 'POST',
+        body: JSON.stringify({ pin }),
+      });
+    },
+    onSuccess: (data, pin) => {
+      setFinancialsData(data);
+      setFinancialsUnlocked(true);
+      setFinancialsPin(pin);
+      setFinancialsPinInput('');
+      setFinancialsError('');
+    },
+    onError: (err) => {
+      let message = err?.message || 'Failed to verify PIN';
+      try {
+        const parsed = JSON.parse(message);
+        if (parsed?.error) message = parsed.error;
+      } catch (_) {
+        // ignore JSON parse errors
+      }
+      setFinancialsError(message);
+      setFinancialsUnlocked(false);
+      setFinancialsData(null);
+    },
+  });
+
+  const markVatPaidMutation = useMutation({
+    mutationFn: async ({ month }) => {
+      if (!financialsPin) throw new Error('PIN required');
+      return api('/admin/financials/vat/pay', {
+        method: 'POST',
+        body: JSON.stringify({ month, pin: financialsPin }),
+      });
+    },
+    onSuccess: () => {
+      showSuccess('VAT marked as paid');
+      verifyFinancialsMutation.mutate(financialsPin);
+    },
+    onError: (err) => {
+      showError('vat-pay', err);
+    },
+  });
+
   // Format currency to Naira
   const formatNaira = (amount) => {
     return new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(amount || 0);
+  };
+
+  const promptForPin = useCallback((actionLabel = 'continue') => {
+    const raw = window.prompt(`Enter admin PIN to ${actionLabel}:`);
+    if (raw === null) return null;
+    const cleaned = String(raw).trim().replace(/\D/g, '');
+    if (!/^\d{4,6}$/.test(cleaned)) {
+      showError('validation', 'PIN must be 4-6 digits');
+      return null;
+    }
+    return cleaned;
+  }, []);
+
+  const renderAdminPinCard = () => {
+    const hasPin = !!pinStatus?.has_pin;
+    const lockedUntil = pinStatus?.locked_until ? new Date(pinStatus.locked_until) : null;
+    const isLocked = lockedUntil && lockedUntil > new Date();
+    const lockMessage = isLocked ? `PIN locked until ${lockedUntil.toLocaleString()}` : '';
+
+    return (
+      <div style={{
+        background: Colors.cardBackground,
+        border: `1px solid ${Colors.border}`,
+        borderRadius: '12px',
+        padding: '24px',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+          <Lock size={20} color={Colors.primary} />
+          <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: Colors.text }}>Admin PIN</h3>
+        </div>
+        <p style={{ color: Colors.muted, fontSize: '13px', marginBottom: '16px' }}>
+          {hasPin ? 'Update your admin PIN to keep financial actions secure.' : 'Set your unique 4–6 digit admin PIN to access financial actions.'}
+        </p>
+        {pinStatusLoading && (
+          <p style={{ color: Colors.muted, fontSize: '12px', marginBottom: '12px' }}>Loading PIN status...</p>
+        )}
+        {lockMessage && (
+          <p style={{ color: Colors.error, fontSize: '12px', marginBottom: '12px' }}>{lockMessage}</p>
+        )}
+        {pinSetupError && (
+          <p style={{ color: Colors.error, fontSize: '12px', marginBottom: '12px' }}>{pinSetupError}</p>
+        )}
+        {hasPin && (
+          <input
+            type="password"
+            inputMode="numeric"
+            maxLength={6}
+            placeholder="Current PIN"
+            value={pinSetup.current}
+            onChange={(e) => setPinSetup((prev) => ({ ...prev, current: e.target.value.replace(/\D/g, '') }))}
+            style={{
+              width: '100%',
+              border: `1px solid ${Colors.border}`,
+              background: Colors.background,
+              color: Colors.text,
+              borderRadius: '8px',
+              padding: '10px 12px',
+              fontSize: '14px',
+              marginBottom: '10px',
+            }}
+          />
+        )}
+        <input
+          type="password"
+          inputMode="numeric"
+          maxLength={6}
+          placeholder="New PIN (4–6 digits)"
+          value={pinSetup.next}
+          onChange={(e) => setPinSetup((prev) => ({ ...prev, next: e.target.value.replace(/\D/g, '') }))}
+          style={{
+            width: '100%',
+            border: `1px solid ${Colors.border}`,
+            background: Colors.background,
+            color: Colors.text,
+            borderRadius: '8px',
+            padding: '10px 12px',
+            fontSize: '14px',
+            marginBottom: '10px',
+          }}
+        />
+        <input
+          type="password"
+          inputMode="numeric"
+          maxLength={6}
+          placeholder="Confirm New PIN"
+          value={pinSetup.confirm}
+          onChange={(e) => setPinSetup((prev) => ({ ...prev, confirm: e.target.value.replace(/\D/g, '') }))}
+          style={{
+            width: '100%',
+            border: `1px solid ${Colors.border}`,
+            background: Colors.background,
+            color: Colors.text,
+            borderRadius: '8px',
+            padding: '10px 12px',
+            fontSize: '14px',
+            marginBottom: '12px',
+          }}
+        />
+        <button
+          onClick={() => setAdminPinMutation.mutate({
+            current_pin: pinSetup.current,
+            new_pin: pinSetup.next,
+            confirm_pin: pinSetup.confirm,
+          })}
+          disabled={setAdminPinMutation.isPending || isLocked || !pinSetup.next || !pinSetup.confirm || (hasPin && !pinSetup.current)}
+          style={{
+            width: '100%',
+            background: Colors.primary,
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            padding: '10px 16px',
+            cursor: setAdminPinMutation.isPending || isLocked ? 'not-allowed' : 'pointer',
+            opacity: setAdminPinMutation.isPending || isLocked ? 0.7 : 1,
+            fontWeight: '600',
+            fontSize: '14px',
+          }}
+        >
+          {setAdminPinMutation.isPending ? 'Saving...' : hasPin ? 'Change PIN' : 'Set PIN'}
+        </button>
+      </div>
+    );
+  };
+
+  const getAuditDetails = (details) => {
+    if (!details) return null;
+    if (typeof details === 'object') return details;
+    try {
+      return JSON.parse(details);
+    } catch (_) {
+      return details;
+    }
+  };
+
+  const getAuditAdminName = (audit) => {
+    const name = [audit?.admin_profile?.first_name, audit?.admin_profile?.last_name].filter(Boolean).join(' ');
+    return name || audit?.admin_profile?.email || audit?.admin_profile_id || 'System';
+  };
+
+  const exportAuditsCsv = () => {
+    const rows = [];
+    rows.push(['Admin', 'Action', 'Target Type', 'Target ID', 'Details', 'Date']);
+    (audits || []).forEach((audit) => {
+      const details = getAuditDetails(audit.details);
+      const detailText = typeof details === 'string' ? details : JSON.stringify(details || {});
+      rows.push([
+        getAuditAdminName(audit),
+        audit.action || '',
+        audit.target_type || '',
+        audit.target_id || '',
+        detailText || '',
+        audit.created_at ? new Date(audit.created_at).toISOString() : '',
+      ]);
+    });
+
+    const csv = rows
+      .map((r) => r.map((v) => `"${String(v || '').replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `admin_activity_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportFinancialsCsv = () => {
+    if (!financialsData) return;
+    const { overview, vatByMonth, paystackFeesByDay, runnerPayouts, health } = financialsData;
+
+    const rows = [];
+    rows.push(['Financial Overview']);
+    rows.push(['Total Platform Fees', formatNaira(overview?.platformFees || 0)]);
+    rows.push(['VAT Owed', formatNaira(overview?.vatOwed || 0)]);
+    rows.push(['VAT Paid', formatNaira(overview?.vatPaid || 0)]);
+    rows.push(['Paystack Fees', formatNaira(overview?.paystackFees || 0)]);
+    rows.push(['Net Revenue', formatNaira(overview?.netRevenue || 0)]);
+    rows.push(['Escrow Balance', formatNaira(overview?.escrowBalance || 0)]);
+    rows.push(['Pending Escrow', formatNaira(overview?.pendingEscrow || 0)]);
+    rows.push(['Pending Releases', formatNaira(overview?.pendingReleases || 0)]);
+    rows.push(['Disputed Funds', formatNaira(overview?.disputedFunds || 0)]);
+    rows.push(['Payouts', formatNaira(overview?.payoutsTotal || 0)]);
+    rows.push(['Refunded', formatNaira(overview?.refundedTotal || 0)]);
+    rows.push([]);
+
+    rows.push(['Financial Health']);
+    rows.push(['Total Transactions', health?.totalTransactions || 0]);
+    rows.push(['Platform Fees Earned', formatNaira(health?.platformFeesEarned || 0)]);
+    rows.push(['VAT Owed', formatNaira(health?.vatOwed || 0)]);
+    rows.push(['Paystack Fees', formatNaira(health?.paystackFees || 0)]);
+    rows.push(['Net Platform Profit', formatNaira(health?.netProfit || 0)]);
+    rows.push([]);
+
+    rows.push(['VAT Tracker']);
+    rows.push(['Month', 'Platform Fees', 'VAT', 'Paid', 'Owed', 'Status']);
+    (vatByMonth || []).forEach((row) => {
+      rows.push([
+        row.month,
+        formatNaira(row.platformFees || 0),
+        formatNaira(row.vat || 0),
+        formatNaira(row.paid || 0),
+        formatNaira(row.owed || 0),
+        row.status || 'Unpaid',
+      ]);
+    });
+    rows.push([]);
+
+    rows.push(['Paystack Fees Tracker (Last 30 Days)']);
+    rows.push(['Date', 'Transaction Volume', 'Paystack Fee']);
+    (paystackFeesByDay || []).forEach((row) => {
+      rows.push([row.date, formatNaira(row.volume || 0), formatNaira(row.fees || 0)]);
+    });
+    rows.push([]);
+
+    rows.push(['Runner Payout Summary']);
+    rows.push(['Runner', 'Jobs Completed', 'Paid']);
+    (runnerPayouts || []).forEach((row) => {
+      rows.push([row.name || 'Unknown', row.jobs || 0, formatNaira(row.paid || 0)]);
+    });
+
+    const csv = rows
+      .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `financials_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   const applyUserSearch = () => {
@@ -321,6 +821,30 @@ export default function AdminDashboard() {
   const applyErrandSearch = () => {
     setErrandSearchQuery(errandSearchInput.trim());
     setPageForTab('errands', 1);
+  };
+
+  const applyAuditFilters = () => {
+    setAuditFilters({
+      admin: auditFilterInput.admin.trim(),
+      action: auditFilterInput.action.trim(),
+      targetType: auditFilterInput.targetType.trim(),
+      dateFrom: auditFilterInput.dateFrom,
+      dateTo: auditFilterInput.dateTo,
+      search: auditFilterInput.search.trim(),
+    });
+    setPageForTab(activeTab, 1);
+  };
+
+  const resetAuditFilters = () => {
+    const cleared = { admin: '', action: '', targetType: '', dateFrom: '', dateTo: '', search: '' };
+    setAuditFilterInput(cleared);
+    setAuditFilters(cleared);
+    setPageForTab(activeTab, 1);
+  };
+
+  const applyAdminSearch = () => {
+    setAdminSearchQuery(adminSearchInput.trim());
+    setPageForTab('admins', 1);
   };
 
   // Get stats from API or default values
@@ -353,7 +877,7 @@ export default function AdminDashboard() {
   const { data: kycSignedUrlsData, isLoading: loadingSignedUrls } = useQuery({
     queryKey: ['kycSignedUrls', reviewingKYC?.id],
     queryFn: () => api(`/admin/kyc/${reviewingKYC.id}/signed-urls`),
-    enabled: !!reviewingKYC?.id,
+    enabled: !!reviewingKYC?.id && canFinance,
     select: (data) => data?.signed_urls,
   });
 
@@ -364,6 +888,8 @@ export default function AdminDashboard() {
   const errands = errandsData.errands || [];
   const escrows = escrowsData.escrows || [];
   const audits = auditsData.audits || [];
+  const admins = adminsData.admins || [];
+  const supportMessages = supportData.messages || [];
 
   // Debug data
   console.log('=== DATA DEBUG ===');
@@ -391,6 +917,9 @@ export default function AdminDashboard() {
       withdrawn: Colors.success,
       approved: Colors.success,
       rejected: Colors.error,
+      open: Colors.warning,
+      replied: Colors.success,
+      closed: Colors.muted,
     };
     return colors[status] || Colors.muted;
   };
@@ -408,7 +937,13 @@ export default function AdminDashboard() {
             ? kycData.total
             : activeTab === 'bank-accounts'
               ? bankAccountsData.total
-              : auditsData.total
+              : activeTab === 'support'
+                ? supportData.total
+                : activeTab === 'admins'
+                  ? adminsData.total
+                  : activeTab === 'admin-activity'
+                    ? auditsData.total
+                  : auditsData.total
   ) / pageSize);
 
   // Component: StatCard
@@ -488,100 +1023,110 @@ export default function AdminDashboard() {
       ) : (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
-            <StatCard icon={Users} label="Total Users" value={stats.totalUsers} color={Colors.primary} />
-            <StatCard icon={UserCheck} label="Runners" value={stats.totalRunners} color="#8B5CF6" />
-            <StatCard icon={Briefcase} label="Clients" value={stats.totalClients} color="#06B6D4" />
-            <StatCard icon={Package} label="Total Errands" value={stats.totalErrands} color={Colors.warning} />
-            <StatCard icon={Activity} label="Active Errands" value={stats.activeErrands} color="#10B981" />
-            <StatCard icon={Banknote} label="Total Revenue" value={formatNaira(stats.revenue)} color={Colors.success} />
-            <StatCard icon={CreditCard} label="Total Payments" value={stats.totalPayments} color="#3B82F6" />
-            <StatCard icon={ShieldAlert} label="Active Disputes" value={stats.disputes} color={Colors.error} />
-            <StatCard icon={BadgePercent} label="Platform Fees" value={formatNaira(stats.platformFeeBaseTotal)} color="#0EA5E9" />
-            <StatCard icon={AlertCircle} label="VAT (7.5%)" value={formatNaira(stats.vatTotal)} color="#F97316" />
-            <StatCard icon={BanknoteArrowUp} label="Paid Out" value={formatNaira(stats.payoutsTotal)} color="#F59E0B" />
-            <StatCard icon={TrendingUp} label="Net Profit" value={formatNaira(netProfit)} color="#22C55E" />
+            {[
+              { icon: Users, label: 'Total Users', value: stats.totalUsers, color: Colors.primary },
+              { icon: UserCheck, label: 'Runners', value: stats.totalRunners, color: '#8B5CF6' },
+              { icon: Briefcase, label: 'Clients', value: stats.totalClients, color: '#06B6D4' },
+              { icon: Package, label: 'Total Errands', value: stats.totalErrands, color: Colors.warning },
+              { icon: Activity, label: 'Active Errands', value: stats.activeErrands, color: '#10B981' },
+              { icon: ShieldAlert, label: 'Active Disputes', value: stats.disputes, color: Colors.error },
+              { icon: CreditCard, label: 'Total Payments', value: stats.totalPayments, color: '#3B82F6', requiresFinance: true },
+              { icon: Banknote, label: 'Total Revenue', value: formatNaira(stats.revenue), color: Colors.success, requiresFinance: true },
+              { icon: BadgePercent, label: 'Platform Fees', value: formatNaira(stats.platformFeeBaseTotal), color: '#0EA5E9', requiresFinance: true },
+              { icon: AlertCircle, label: 'VAT (7.5%)', value: formatNaira(stats.vatTotal), color: '#F97316', requiresFinance: true },
+              { icon: BanknoteArrowUp, label: 'Paid Out', value: formatNaira(stats.payoutsTotal), color: '#F59E0B', requiresFinance: true },
+              { icon: TrendingUp, label: 'Net Profit', value: formatNaira(netProfit), color: '#22C55E', requiresFinance: true },
+            ]
+              .filter((card) => !card.requiresFinance || canFinance)
+              .map((card) => (
+                <StatCard key={card.label} icon={card.icon} label={card.label} value={card.value} color={card.color} />
+              ))}
           </div>
           
-          <div style={{ 
-            background: Colors.cardBackground, 
-            border: `1px solid ${Colors.border}`, 
-            borderRadius: '12px', 
-            padding: '24px',
-            marginTop: '16px'
-          }}>
-            <h3 style={{ fontSize: '18px', fontWeight: '700', color: Colors.text, marginBottom: '16px' }}>
-              Quick Stats Overview
-            </h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-              <div>
-                <p style={{ fontSize: '12px', color: Colors.muted, marginBottom: '4px' }}>Average Revenue per Payment</p>
-                <p style={{ fontSize: '20px', fontWeight: '700', color: Colors.text }}>
-                  {formatNaira(stats.totalPayments > 0 ? stats.revenue / stats.totalPayments : 0)}
-                </p>
-              </div>
-              <div>
-                <p style={{ fontSize: '12px', color: Colors.muted, marginBottom: '4px' }}>Completion Rate</p>
-                <p style={{ fontSize: '20px', fontWeight: '700', color: Colors.text }}>
-                  {stats.totalErrands > 0 ? ((stats.totalErrands - stats.activeErrands) / stats.totalErrands * 100).toFixed(1) : 0}%
-                </p>
-              </div>
-              <div>
-                <p style={{ fontSize: '12px', color: Colors.muted, marginBottom: '4px' }}>Dispute Rate</p>
-                <p style={{ fontSize: '20px', fontWeight: '700', color: Colors.text }}>
-                  {stats.totalPayments > 0 ? (stats.disputes / stats.totalPayments * 100).toFixed(1) : 0}%
-                </p>
-              </div>
-              <div>
-                <p style={{ fontSize: '12px', color: Colors.muted, marginBottom: '4px' }}>Platform Fee %</p>
-                <p style={{ fontSize: '20px', fontWeight: '700', color: Colors.text }}>
-                  {feePct.toFixed(1)}%
-                </p>
+          {canFinance && (
+            <div style={{ 
+              background: Colors.cardBackground, 
+              border: `1px solid ${Colors.border}`, 
+              borderRadius: '12px', 
+              padding: '24px',
+              marginTop: '16px'
+            }}>
+              <h3 style={{ fontSize: '18px', fontWeight: '700', color: Colors.text, marginBottom: '16px' }}>
+                Quick Stats Overview
+              </h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                <div>
+                  <p style={{ fontSize: '12px', color: Colors.muted, marginBottom: '4px' }}>Average Revenue per Payment</p>
+                  <p style={{ fontSize: '20px', fontWeight: '700', color: Colors.text }}>
+                    {formatNaira(stats.totalPayments > 0 ? stats.revenue / stats.totalPayments : 0)}
+                  </p>
+                </div>
+                <div>
+                  <p style={{ fontSize: '12px', color: Colors.muted, marginBottom: '4px' }}>Completion Rate</p>
+                  <p style={{ fontSize: '20px', fontWeight: '700', color: Colors.text }}>
+                    {stats.totalErrands > 0 ? ((stats.totalErrands - stats.activeErrands) / stats.totalErrands * 100).toFixed(1) : 0}%
+                  </p>
+                </div>
+                <div>
+                  <p style={{ fontSize: '12px', color: Colors.muted, marginBottom: '4px' }}>Dispute Rate</p>
+                  <p style={{ fontSize: '20px', fontWeight: '700', color: Colors.text }}>
+                    {stats.totalPayments > 0 ? (stats.disputes / stats.totalPayments * 100).toFixed(1) : 0}%
+                  </p>
+                </div>
+                <div>
+                  <p style={{ fontSize: '12px', color: Colors.muted, marginBottom: '4px' }}>Platform Fee %</p>
+                  <p style={{ fontSize: '20px', fontWeight: '700', color: Colors.text }}>
+                    {feePct.toFixed(1)}%
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
-          <div style={{
-            background: Colors.cardBackground,
-            border: `1px solid ${Colors.border}`,
-            borderRadius: '12px',
-            padding: '24px',
-            marginTop: '16px'
-          }}>
-            <h3 style={{ fontSize: '18px', fontWeight: '700', color: Colors.text, marginBottom: '16px' }}>
-              Revenue vs Payouts (Last 6 Months)
-            </h3>
-            {monthly.length === 0 ? (
-              <p style={{ color: Colors.muted }}>No data available</p>
-            ) : (
-              <>
-                <div style={{ display: 'flex', gap: '12px', marginBottom: '12px', fontSize: '12px', color: Colors.muted }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ width: '10px', height: '10px', background: Colors.primary, borderRadius: '2px', display: 'inline-block' }} />
-                    Revenue
+          {canFinance && (
+            <div style={{
+              background: Colors.cardBackground,
+              border: `1px solid ${Colors.border}`,
+              borderRadius: '12px',
+              padding: '24px',
+              marginTop: '16px'
+            }}>
+              <h3 style={{ fontSize: '18px', fontWeight: '700', color: Colors.text, marginBottom: '16px' }}>
+                Revenue vs Payouts (Last 6 Months)
+              </h3>
+              {monthly.length === 0 ? (
+                <p style={{ color: Colors.muted }}>No data available</p>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', gap: '12px', marginBottom: '12px', fontSize: '12px', color: Colors.muted }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ width: '10px', height: '10px', background: Colors.primary, borderRadius: '2px', display: 'inline-block' }} />
+                      Revenue
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ width: '10px', height: '10px', background: Colors.warning, borderRadius: '2px', display: 'inline-block' }} />
+                      Payouts
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ width: '10px', height: '10px', background: Colors.warning, borderRadius: '2px', display: 'inline-block' }} />
-                    Payouts
-                  </div>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${monthly.length}, minmax(60px, 1fr))`, gap: '12px', alignItems: 'end', height: '220px' }}>
-                  {monthly.map((m) => {
-                    const revPct = ((m.revenue || 0) / maxMonthlyValue) * 100;
-                    const payPct = ((m.payouts || 0) / maxMonthlyValue) * 100;
-                    return (
-                      <div key={m.month} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', height: '100%' }}>
-                        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', height: '100%' }}>
-                          <div style={{ width: '16px', height: `${revPct}%`, background: Colors.primary, borderRadius: '4px' }} />
-                          <div style={{ width: '16px', height: `${payPct}%`, background: Colors.warning, borderRadius: '4px' }} />
+                  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${monthly.length}, minmax(60px, 1fr))`, gap: '12px', alignItems: 'end', height: '220px' }}>
+                    {monthly.map((m) => {
+                      const revPct = ((m.revenue || 0) / maxMonthlyValue) * 100;
+                      const payPct = ((m.payouts || 0) / maxMonthlyValue) * 100;
+                      return (
+                        <div key={m.month} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', height: '100%' }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', height: '100%' }}>
+                            <div style={{ width: '16px', height: `${revPct}%`, background: Colors.primary, borderRadius: '4px' }} />
+                            <div style={{ width: '16px', height: `${payPct}%`, background: Colors.warning, borderRadius: '4px' }} />
+                          </div>
+                          <div style={{ fontSize: '11px', color: Colors.muted }}>{m.month}</div>
                         </div>
-                        <div style={{ fontSize: '11px', color: Colors.muted }}>{m.month}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-          </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </>
       )}
     </div>
@@ -814,6 +1359,347 @@ export default function AdminDashboard() {
       )}
     </div>
   );
+
+  // RENDER: Financials (PIN Protected)
+  const renderFinancials = () => {
+    if (!financialsUnlocked) {
+      const hasPin = !!pinStatus?.has_pin;
+      const lockedUntil = pinStatus?.locked_until ? new Date(pinStatus.locked_until) : null;
+      const isLocked = lockedUntil && lockedUntil > new Date();
+      const lockMessage = isLocked ? `PIN locked until ${lockedUntil.toLocaleString()}` : '';
+
+      return (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '24px' }}>
+          <div style={{ width: '100%', maxWidth: '520px' }}>
+            <div style={{
+              background: Colors.cardBackground,
+              border: `1px solid ${Colors.border}`,
+              borderRadius: '12px',
+              padding: '24px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                <Lock size={20} color={Colors.primary} />
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: Colors.text }}>Financials (PIN Protected)</h3>
+              </div>
+              <p style={{ color: Colors.muted, fontSize: '13px', marginBottom: '16px' }}>
+                Enter your 4–6 digit PIN to access financial data.
+              </p>
+              {!hasPin && (
+                <p style={{ color: Colors.warning, fontSize: '12px', marginBottom: '12px' }}>
+                  Please set your admin PIN first in Settings.
+                </p>
+              )}
+              {pinStatusLoading && (
+                <p style={{ color: Colors.muted, fontSize: '12px', marginBottom: '12px' }}>Loading PIN status...</p>
+              )}
+              {lockMessage && (
+                <p style={{ color: Colors.error, fontSize: '12px', marginBottom: '12px' }}>{lockMessage}</p>
+              )}
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={6}
+                placeholder="Enter PIN"
+                value={financialsPinInput}
+                onChange={(e) => setFinancialsPinInput(e.target.value.replace(/\D/g, ''))}
+                style={{
+                  width: '100%',
+                  border: `1px solid ${Colors.border}`,
+                  background: Colors.background,
+                  color: Colors.text,
+                  borderRadius: '8px',
+                  padding: '10px 12px',
+                  fontSize: '14px',
+                  marginBottom: '12px',
+                }}
+              />
+              {financialsError && (
+                <p style={{ color: Colors.error, fontSize: '12px', marginBottom: '12px' }}>{financialsError}</p>
+              )}
+              <button
+                onClick={() => verifyFinancialsMutation.mutate(financialsPinInput.trim())}
+                disabled={verifyFinancialsMutation.isPending || !financialsPinInput.trim() || isLocked || !hasPin}
+                style={{
+                  width: '100%',
+                  background: Colors.primary,
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '10px 16px',
+                  cursor: verifyFinancialsMutation.isPending || isLocked ? 'not-allowed' : 'pointer',
+                  opacity: verifyFinancialsMutation.isPending || isLocked ? 0.7 : 1,
+                  fontWeight: '600',
+                  fontSize: '14px',
+                }}
+              >
+                {verifyFinancialsMutation.isPending ? 'Verifying...' : 'Unlock Financials'}
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (!financialsData) {
+      return (
+        <div style={{ textAlign: 'center', padding: '24px', color: Colors.muted }}>
+          No financial data available.
+        </div>
+      );
+    }
+
+    const overview = financialsData.overview || {};
+    const vatByMonth = financialsData.vatByMonth || [];
+    const paystackFeesByDay = financialsData.paystackFeesByDay || [];
+    const escrowSummary = financialsData.escrowSummary || {};
+    const runnerPayouts = financialsData.runnerPayouts || [];
+    const health = financialsData.health || {};
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '700', color: Colors.text }}>Financials</h2>
+            <p style={{ margin: '4px 0 0', color: Colors.muted, fontSize: '12px' }}>
+              Sensitive data is protected by PIN. Paystack fees are included where Paystack returns fee data.
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => verifyFinancialsMutation.mutate(financialsPin)}
+              style={{
+                background: Colors.cardBackground,
+                color: Colors.text,
+                border: `1px solid ${Colors.border}`,
+                borderRadius: '8px',
+                padding: '8px 12px',
+                cursor: 'pointer',
+                fontWeight: '600',
+                fontSize: '13px',
+              }}
+            >
+              Refresh
+            </button>
+            <button
+              onClick={exportFinancialsCsv}
+              style={{
+                background: Colors.primary,
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '8px 12px',
+                cursor: 'pointer',
+                fontWeight: '600',
+                fontSize: '13px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              <FileDown size={14} /> Export CSV
+            </button>
+            <button
+              onClick={() => {
+                setFinancialsUnlocked(false);
+                setFinancialsPin('');
+                setFinancialsData(null);
+              }}
+              style={{
+                background: '#111827',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '8px 12px',
+                cursor: 'pointer',
+                fontWeight: '600',
+                fontSize: '13px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              <Lock size={14} /> Lock
+            </button>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+          <StatCard icon={BadgePercent} label="Platform Fees" value={formatNaira(overview.platformFees)} color="#0EA5E9" />
+          <StatCard icon={AlertCircle} label="VAT Owed" value={formatNaira(overview.vatOwed)} subtext={`Paid: ${formatNaira(overview.vatPaid || 0)}`} color="#F97316" />
+          <StatCard icon={CreditCard} label="Paystack Fees" value={formatNaira(overview.paystackFees)} color="#3B82F6" />
+          <StatCard icon={TrendingUp} label="Net Revenue" value={formatNaira(overview.netRevenue)} color="#22C55E" />
+          <StatCard icon={Landmark} label="Escrow Balance" value={formatNaira(overview.escrowBalance)} color="#10B981" />
+          <StatCard icon={BanknoteArrowUp} label="Pending Releases" value={formatNaira(overview.pendingReleases)} color="#F59E0B" />
+        </div>
+
+        <div style={{
+          background: Colors.cardBackground,
+          border: `1px solid ${Colors.border}`,
+          borderRadius: '12px',
+          padding: '20px',
+        }}>
+          <h3 style={{ margin: '0 0 12px', fontSize: '16px', fontWeight: '700', color: Colors.text }}>Financial Health</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+            <div>
+              <p style={{ fontSize: '12px', color: Colors.muted, marginBottom: '4px' }}>Total Transactions</p>
+              <p style={{ fontSize: '20px', fontWeight: '700', color: Colors.text }}>{health.totalTransactions || 0}</p>
+            </div>
+            <div>
+              <p style={{ fontSize: '12px', color: Colors.muted, marginBottom: '4px' }}>Platform Fees Earned</p>
+              <p style={{ fontSize: '20px', fontWeight: '700', color: Colors.text }}>{formatNaira(health.platformFeesEarned)}</p>
+            </div>
+            <div>
+              <p style={{ fontSize: '12px', color: Colors.muted, marginBottom: '4px' }}>VAT Owed</p>
+              <p style={{ fontSize: '20px', fontWeight: '700', color: Colors.text }}>{formatNaira(health.vatOwed)}</p>
+            </div>
+            <div>
+              <p style={{ fontSize: '12px', color: Colors.muted, marginBottom: '4px' }}>Net Platform Profit</p>
+              <p style={{ fontSize: '20px', fontWeight: '700', color: Colors.text }}>{formatNaira(health.netProfit)}</p>
+            </div>
+          </div>
+        </div>
+
+        <div style={{
+          background: Colors.cardBackground,
+          border: `1px solid ${Colors.border}`,
+          borderRadius: '12px',
+          padding: '20px',
+        }}>
+          <h3 style={{ margin: '0 0 12px', fontSize: '16px', fontWeight: '700', color: Colors.text }}>Escrow / Wallet Summary</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+            <div>
+              <p style={{ fontSize: '12px', color: Colors.muted, marginBottom: '4px' }}>Escrow Balance</p>
+              <p style={{ fontSize: '20px', fontWeight: '700', color: Colors.text }}>{formatNaira(escrowSummary.escrowBalance)}</p>
+            </div>
+            <div>
+              <p style={{ fontSize: '12px', color: Colors.muted, marginBottom: '4px' }}>Pending Releases</p>
+              <p style={{ fontSize: '20px', fontWeight: '700', color: Colors.text }}>{formatNaira(escrowSummary.pendingReleases)}</p>
+            </div>
+            <div>
+              <p style={{ fontSize: '12px', color: Colors.muted, marginBottom: '4px' }}>Disputed Funds</p>
+              <p style={{ fontSize: '20px', fontWeight: '700', color: Colors.text }}>{formatNaira(escrowSummary.disputedFunds)}</p>
+            </div>
+            <div>
+              <p style={{ fontSize: '12px', color: Colors.muted, marginBottom: '4px' }}>Refunded</p>
+              <p style={{ fontSize: '20px', fontWeight: '700', color: Colors.text }}>{formatNaira(escrowSummary.refundedTotal)}</p>
+            </div>
+            <div>
+              <p style={{ fontSize: '12px', color: Colors.muted, marginBottom: '4px' }}>Paid Out</p>
+              <p style={{ fontSize: '20px', fontWeight: '700', color: Colors.text }}>{formatNaira(escrowSummary.payoutsTotal)}</p>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div style={{ overflowX: 'auto', borderRadius: '8px', border: `1px solid ${Colors.border}`, background: Colors.cardBackground }}>
+            <div style={{ padding: '12px 16px', borderBottom: `1px solid ${Colors.border}` }}>
+              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: Colors.text }}>VAT Tracker</h3>
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead style={{ background: Colors.cardBackground, borderBottom: `1px solid ${Colors.border}` }}>
+                <tr>
+                  <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '12px', color: Colors.text }}>Month</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '12px', color: Colors.text }}>Platform Fees</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '12px', color: Colors.text }}>VAT (7.5%)</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '12px', color: Colors.text }}>Paid</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '12px', color: Colors.text }}>Owed</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '12px', color: Colors.text }}>Status</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '12px', color: Colors.text }}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {vatByMonth.map((row) => (
+                  <tr key={row.month} style={{ borderBottom: `1px solid ${Colors.border}` }}>
+                    <td style={{ padding: '10px 12px', fontSize: '13px', color: Colors.text }}>{row.month}</td>
+                    <td style={{ padding: '10px 12px', fontSize: '13px', color: Colors.text }}>{formatNaira(row.platformFees)}</td>
+                    <td style={{ padding: '10px 12px', fontSize: '13px', color: Colors.text }}>{formatNaira(row.vat)}</td>
+                    <td style={{ padding: '10px 12px', fontSize: '13px', color: Colors.text }}>{formatNaira(row.paid || 0)}</td>
+                    <td style={{ padding: '10px 12px', fontSize: '13px', color: Colors.text }}>{formatNaira(row.owed || 0)}</td>
+                    <td style={{ padding: '10px 12px', fontSize: '12px', color: Colors.muted }}>{row.status || 'Unpaid'}</td>
+                    <td style={{ padding: '10px 12px' }}>
+                      <button
+                        onClick={() => {
+                          if (row.owed <= 0) return;
+                          if (!window.confirm(`Mark VAT for ${row.month} as paid?`)) return;
+                          markVatPaidMutation.mutate({ month: row.month });
+                        }}
+                        disabled={markVatPaidMutation.isPending || row.owed <= 0}
+                        style={{
+                          background: row.owed <= 0 ? Colors.border : Colors.primary,
+                          color: row.owed <= 0 ? Colors.muted : 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          padding: '6px 10px',
+                          cursor: row.owed <= 0 ? 'not-allowed' : 'pointer',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                        }}
+                      >
+                        {row.owed <= 0 ? 'Paid' : (markVatPaidMutation.isPending ? 'Updating...' : 'Mark Paid')}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div style={{ overflowX: 'auto', borderRadius: '8px', border: `1px solid ${Colors.border}`, background: Colors.cardBackground }}>
+            <div style={{ padding: '12px 16px', borderBottom: `1px solid ${Colors.border}` }}>
+              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: Colors.text }}>Paystack Fees Tracker (30 days)</h3>
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead style={{ background: Colors.cardBackground, borderBottom: `1px solid ${Colors.border}` }}>
+                <tr>
+                  <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '12px', color: Colors.text }}>Date</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '12px', color: Colors.text }}>Volume</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '12px', color: Colors.text }}>Paystack Fee</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paystackFeesByDay.map((row) => (
+                  <tr key={row.date} style={{ borderBottom: `1px solid ${Colors.border}` }}>
+                    <td style={{ padding: '10px 12px', fontSize: '13px', color: Colors.text }}>{row.date}</td>
+                    <td style={{ padding: '10px 12px', fontSize: '13px', color: Colors.text }}>{formatNaira(row.volume)}</td>
+                    <td style={{ padding: '10px 12px', fontSize: '13px', color: Colors.text }}>{formatNaira(row.fees)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div style={{ overflowX: 'auto', borderRadius: '8px', border: `1px solid ${Colors.border}`, background: Colors.cardBackground }}>
+          <div style={{ padding: '12px 16px', borderBottom: `1px solid ${Colors.border}` }}>
+            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: Colors.text }}>Runner Payout Summary</h3>
+          </div>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead style={{ background: Colors.cardBackground, borderBottom: `1px solid ${Colors.border}` }}>
+              <tr>
+                <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '12px', color: Colors.text }}>Runner</th>
+                <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '12px', color: Colors.text }}>Jobs Completed</th>
+                <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '12px', color: Colors.text }}>Paid</th>
+              </tr>
+            </thead>
+            <tbody>
+              {runnerPayouts.map((row) => (
+                <tr key={row.runner_id} style={{ borderBottom: `1px solid ${Colors.border}` }}>
+                  <td style={{ padding: '10px 12px', fontSize: '13px', color: Colors.text }}>{row.name}</td>
+                  <td style={{ padding: '10px 12px', fontSize: '13px', color: Colors.text }}>{row.jobs}</td>
+                  <td style={{ padding: '10px 12px', fontSize: '13px', color: Colors.text }}>{formatNaira(row.paid)}</td>
+                </tr>
+              ))}
+              {runnerPayouts.length === 0 && (
+                <tr>
+                  <td colSpan={3} style={{ padding: '12px', fontSize: '13px', color: Colors.muted }}>No payout data yet.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
 
   // RENDER: Errands
   const renderErrands = () => (
@@ -1141,7 +2027,11 @@ export default function AdminDashboard() {
                           <Eye size={14} /> View
                         </button>
                         <button
-                          onClick={() => reconcilePendingMutation.mutate(escrow)}
+                          onClick={() => {
+                            const pin = promptForPin('reconcile this payment');
+                            if (!pin) return;
+                            reconcilePendingMutation.mutate({ escrow, pin });
+                          }}
                           disabled={!escrow.payment_reference || reconcilePendingMutation.isPending}
                           style={{
                             background: !escrow.payment_reference ? Colors.muted : Colors.success,
@@ -1270,7 +2160,11 @@ export default function AdminDashboard() {
 
             <div style={{ marginTop: '16px' }}>
               <button
-                onClick={() => reconcilePendingMutation.mutate(selectedEscrow)}
+                onClick={() => {
+                  const pin = promptForPin('reconcile this payment');
+                  if (!pin) return;
+                  reconcilePendingMutation.mutate({ escrow: selectedEscrow, pin });
+                }}
                 disabled={!selectedEscrow.payment_reference || reconcilePendingMutation.isPending}
                 style={{
                   background: !selectedEscrow.payment_reference ? Colors.muted : Colors.success,
@@ -1375,7 +2269,7 @@ export default function AdminDashboard() {
                             fontWeight: '600',
                           }}
                         >
-                          Resolve
+                          {canResolveDisputes ? 'Resolve' : 'View'}
                         </button>
                       </td>
                     </tr>
@@ -1483,11 +2377,44 @@ export default function AdminDashboard() {
                 <textarea value={adminNotes} onChange={(e) => setAdminNotes(e.target.value)} placeholder="Add notes for this decision..." style={{ width: '100%', minHeight: '80px', padding: '10px', borderRadius: '8px', border: `1px solid ${Colors.border}`, background: Colors.background, color: Colors.text, fontSize: '16px', fontFamily: 'inherit' }} />
               </div>
 
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+              {canResolveDisputes ? (
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
                 {['released', 'refunded', 'split'].map((res) => (
-                  <button key={res} onClick={() => resolveDisputeMutation.mutate({ id: resolvingDispute.id, resolution: res, admin_notes: adminNotes })} disabled={resolveDisputeMutation.isPending} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: Colors.primary, color: 'white', cursor: 'pointer', fontWeight: 700, textTransform: 'capitalize', opacity: resolveDisputeMutation.isPending ? 0.6 : 1 }}>{resolveDisputeMutation.isPending ? 'Processing...' : res}</button>
+                  <button
+                    key={res}
+                    onClick={() => {
+                      const pin = promptForPin(`resolve this dispute as ${res}`);
+                      if (!pin) return;
+                      resolveDisputeMutation.mutate({
+                        id: resolvingDispute.id,
+                        resolution: res,
+                        admin_notes: adminNotes,
+                        pin,
+                      });
+                    }}
+                    disabled={resolveDisputeMutation.isPending}
+                    style={{
+                      flex: 1,
+                      padding: '10px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: Colors.primary,
+                      color: 'white',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                      textTransform: 'capitalize',
+                      opacity: resolveDisputeMutation.isPending ? 0.6 : 1,
+                    }}
+                  >
+                    {resolveDisputeMutation.isPending ? 'Processing...' : res}
+                  </button>
                 ))}
-              </div>
+                </div>
+              ) : (
+                <p style={{ color: Colors.muted, fontSize: '13px', marginBottom: '8px' }}>
+                  You have view-only access for disputes.
+                </p>
+              )}
 
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button onClick={() => { setResolvingDispute(null); setAdminNotes(''); }} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: `1px solid ${Colors.border}`, background: 'transparent', color: Colors.text, cursor: 'pointer', fontWeight: 600 }}>Close for Now</button>
@@ -1593,6 +2520,299 @@ export default function AdminDashboard() {
           </div>
           <Pagination />
         </>
+      )}
+    </div>
+  );
+
+  // RENDER: Support
+  const renderSupport = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
+        {['open', 'replied', 'all'].map((status) => (
+          <button
+            key={status}
+            onClick={() => {
+              setSupportFilter(status);
+              setPageForTab('support', 1);
+            }}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '6px',
+              border: 'none',
+              background: supportFilter === status ? Colors.primary : Colors.cardBackground,
+              color: supportFilter === status ? 'white' : Colors.text,
+              cursor: 'pointer',
+              fontWeight: '600',
+              fontSize: '13px',
+              transition: 'all 0.2s',
+            }}
+          >
+            {status.charAt(0).toUpperCase() + status.slice(1)}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', gap: '12px' }}>
+        <div style={{ flex: 1, position: 'relative' }}>
+          <Search size={16} style={{ position: 'absolute', left: '12px', top: '12px', color: Colors.muted }} />
+          <input
+            type="text"
+            placeholder="Search by name, email, subject, or message..."
+            value={getTabSearchInput('support')}
+            onChange={(e) => {
+              setTabSearchInputValue('support', e.target.value);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') applyTabSearch('support');
+            }}
+            style={{
+              width: '100%',
+              paddingLeft: '36px',
+              padding: '10px 12px 10px 36px',
+              borderRadius: '8px',
+              border: `1px solid ${Colors.border}`,
+              background: Colors.cardBackground,
+              color: Colors.text,
+              fontSize: '14px',
+            }}
+          />
+        </div>
+        <button
+          onClick={() => applyTabSearch('support')}
+          style={{
+            background: Colors.primary,
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            padding: '10px 16px',
+            cursor: 'pointer',
+            fontWeight: '600',
+            fontSize: '14px',
+          }}
+        >
+          Search
+        </button>
+      </div>
+
+      {supportLoading ? (
+        <p style={{ color: Colors.muted }}>Loading support messages...</p>
+      ) : supportMessages.length === 0 ? (
+        <p style={{ color: Colors.muted }}>No support messages found</p>
+      ) : (
+        <>
+          <div style={{ overflowX: 'auto', borderRadius: '8px', border: `1px solid ${Colors.border}` }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead style={{ background: Colors.cardBackground, borderBottom: `1px solid ${Colors.border}` }}>
+                <tr>
+                  <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Name</th>
+                  <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Email</th>
+                  <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Subject</th>
+                  <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Status</th>
+                  <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Date</th>
+                  <th style={{ padding: '12px', textAlign: 'center', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {supportMessages.map((msg) => (
+                  <tr key={msg.id} style={{ borderBottom: `1px solid ${Colors.border}` }}>
+                    <td style={{ padding: '12px', color: Colors.text, fontSize: '14px' }}>{msg.name || 'Anonymous'}</td>
+                    <td style={{ padding: '12px', color: Colors.text, fontSize: '12px' }}>{msg.email || '—'}</td>
+                    <td style={{ padding: '12px', color: Colors.text, fontSize: '14px' }}>{msg.subject || 'General'}</td>
+                    <td style={{ padding: '12px' }}>
+                      <span style={{
+                        display: 'inline-block',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        fontWeight: '600',
+                        background: getStatusColor(msg.status),
+                        color: 'white',
+                      }}>
+                        {msg.status || 'open'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px', color: Colors.text, fontSize: '14px' }}>{new Date(msg.created_at).toLocaleDateString()}</td>
+                    <td style={{ padding: '12px', textAlign: 'center' }}>
+                      <button
+                        onClick={() => {
+                          setSelectedSupport(msg);
+                          setSupportReply('');
+                        }}
+                        style={{
+                          background: Colors.primary,
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          padding: '6px 12px',
+                          cursor: 'pointer',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                        }}
+                      >
+                        View / Reply
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Pagination />
+        </>
+      )}
+
+      {selectedSupport && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px',
+          overflowY: 'auto',
+        }}>
+          <div style={{
+            background: '#ffffff',
+            border: `2px solid ${Colors.primary}`,
+            borderRadius: '12px',
+            padding: '24px',
+            maxWidth: '720px',
+            width: '100%',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            position: 'relative',
+          }}>
+            <button
+              onClick={() => {
+                setSelectedSupport(null);
+                setSupportReply('');
+              }}
+              style={{
+                position: 'absolute',
+                top: '12px',
+                right: '12px',
+                background: 'transparent',
+                border: 'none',
+                fontSize: '24px',
+                cursor: 'pointer',
+                color: Colors.text,
+              }}
+            >
+              ✕
+            </button>
+
+            <h3 style={{ color: Colors.primary, marginBottom: '16px', fontSize: '20px', fontWeight: '700' }}>Support Message</h3>
+
+            {supportDetailLoading ? (
+              <p style={{ color: Colors.muted }}>Loading message...</p>
+            ) : (
+              <>
+                <div style={{ display: 'grid', gap: '10px', marginBottom: '16px' }}>
+                  <div>
+                    <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>FROM</p>
+                    <p style={{ margin: '6px 0 0', color: Colors.text, fontWeight: '600' }}>
+                      {(supportDetailData?.message?.name || selectedSupport.name || 'Anonymous')} · {(supportDetailData?.message?.email || selectedSupport.email || '—')}
+                    </p>
+                  </div>
+                  <div>
+                    <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>SUBJECT</p>
+                    <p style={{ margin: '6px 0 0', color: Colors.text }}>{supportDetailData?.message?.subject || selectedSupport.subject || 'General'}</p>
+                  </div>
+                  <div>
+                    <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>MESSAGE</p>
+                    <p style={{ margin: '6px 0 0', color: Colors.text, whiteSpace: 'pre-wrap' }}>{supportDetailData?.message?.message || selectedSupport.message}</p>
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: '16px' }}>
+                  <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>REPLIES</p>
+                  {(supportDetailData?.replies || []).length === 0 ? (
+                    <p style={{ margin: '6px 0 0', color: Colors.muted, fontSize: '13px' }}>No replies yet.</p>
+                  ) : (
+                    <div style={{ display: 'grid', gap: '10px', marginTop: '8px' }}>
+                      {(supportDetailData?.replies || []).map((reply) => (
+                        <div key={reply.id} style={{ background: Colors.background, border: `1px solid ${Colors.border}`, borderRadius: '8px', padding: '10px' }}>
+                          <p style={{ margin: 0, color: Colors.text, whiteSpace: 'pre-wrap' }}>{reply.reply}</p>
+                          <p style={{ margin: '6px 0 0', color: Colors.muted, fontSize: '11px' }}>
+                            {reply.admin_profile_id || 'Admin'} · {new Date(reply.created_at).toLocaleString()}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{ display: 'block', color: Colors.text, fontSize: '12px', fontWeight: '600', marginBottom: '8px' }}>Reply</label>
+                  <textarea
+                    value={supportReply}
+                    onChange={(e) => setSupportReply(e.target.value)}
+                    placeholder="Write a reply..."
+                    style={{
+                      width: '100%',
+                      minHeight: '90px',
+                      padding: '10px',
+                      borderRadius: '8px',
+                      border: `1px solid ${Colors.border}`,
+                      background: Colors.background,
+                      color: Colors.text,
+                      fontSize: '14px',
+                      fontFamily: 'inherit',
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    onClick={() => {
+                      if (!supportReply.trim()) {
+                        showError('support-reply', 'Please enter a reply');
+                        return;
+                      }
+                      replySupportMutation.mutate({ id: supportDetailData?.message?.id || selectedSupport.id, reply: supportReply.trim() });
+                    }}
+                    disabled={replySupportMutation.isPending || !supportReply.trim()}
+                    style={{
+                      flex: 1,
+                      padding: '12px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: Colors.primary,
+                      color: 'white',
+                      cursor: replySupportMutation.isPending || !supportReply.trim() ? 'not-allowed' : 'pointer',
+                      fontWeight: '600',
+                      fontSize: '14px',
+                      opacity: replySupportMutation.isPending || !supportReply.trim() ? 0.6 : 1,
+                    }}
+                  >
+                    {replySupportMutation.isPending ? 'Sending...' : 'Send Reply'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSelectedSupport(null);
+                      setSupportReply('');
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: '12px',
+                      borderRadius: '8px',
+                      border: `1px solid ${Colors.border}`,
+                      background: 'transparent',
+                      color: Colors.text,
+                      cursor: 'pointer',
+                      fontWeight: '600',
+                      fontSize: '14px',
+                    }}
+                  >
+                    Close
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
@@ -2007,109 +3227,112 @@ export default function AdminDashboard() {
         {settingsLoading ? (
           <p style={{ color: Colors.muted }}>Loading settings...</p>
         ) : (
-          <div style={{ background: Colors.cardBackground, border: `1px solid ${Colors.border}`, borderRadius: '12px', padding: '24px' }}>
-            <h3 style={{ color: Colors.text, marginBottom: '20px', fontSize: '18px', fontWeight: '700' }}>System Settings</h3>
-            
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', color: Colors.text, fontSize: '14px', fontWeight: '600', marginBottom: '8px' }}>Platform Fee (%)</label>
-              <input
-                type="number"
-                value={currentSettings.platform_fee_percentage || 5}
-                onChange={(e) => setSystemSettings({ ...currentSettings, platform_fee_percentage: parseFloat(e.target.value) })}
+          <>
+            {canFinance && renderAdminPinCard()}
+            <div style={{ background: Colors.cardBackground, border: `1px solid ${Colors.border}`, borderRadius: '12px', padding: '24px' }}>
+              <h3 style={{ color: Colors.text, marginBottom: '20px', fontSize: '18px', fontWeight: '700' }}>System Settings</h3>
+              
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', color: Colors.text, fontSize: '14px', fontWeight: '600', marginBottom: '8px' }}>Platform Fee (%)</label>
+                <input
+                  type="number"
+                  value={currentSettings.platform_fee_percentage || 5}
+                  onChange={(e) => setSystemSettings({ ...currentSettings, platform_fee_percentage: parseFloat(e.target.value) })}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: `1px solid ${Colors.border}`,
+                    background: Colors.background,
+                    color: Colors.text,
+                    fontSize: '14px',
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', color: Colors.text, fontSize: '14px', fontWeight: '600', marginBottom: '8px' }}>Minimum Errand Amount (NGN)</label>
+                <input
+                  type="number"
+                  value={currentSettings.minimum_errand_amount || 1000}
+                  onChange={(e) => setSystemSettings({ ...currentSettings, minimum_errand_amount: parseFloat(e.target.value) })}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: `1px solid ${Colors.border}`,
+                    background: Colors.background,
+                    color: Colors.text,
+                    fontSize: '14px',
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', color: Colors.text, fontSize: '14px', fontWeight: '600', marginBottom: '8px' }}>Maximum Errand Amount (NGN)</label>
+                <input
+                  type="number"
+                  value={currentSettings.maximum_errand_amount || 500000}
+                  onChange={(e) => setSystemSettings({ ...currentSettings, maximum_errand_amount: parseFloat(e.target.value) })}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: `1px solid ${Colors.border}`,
+                    background: Colors.background,
+                    color: Colors.text,
+                    fontSize: '14px',
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', color: Colors.text, fontSize: '14px', fontWeight: '600', marginBottom: '8px' }}>Max Concurrent Errands</label>
+                <input
+                  type="number"
+                  value={currentSettings.max_concurrent_errands || 10}
+                  onChange={(e) => setSystemSettings({ ...currentSettings, max_concurrent_errands: parseInt(e.target.value) })}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: `1px solid ${Colors.border}`,
+                    background: Colors.background,
+                    color: Colors.text,
+                    fontSize: '14px',
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <input
+                  type="checkbox"
+                  checked={currentSettings.maintenance_mode || false}
+                  onChange={(e) => setSystemSettings({ ...currentSettings, maintenance_mode: e.target.checked })}
+                  style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                />
+                <label style={{ color: Colors.text, fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>Maintenance Mode</label>
+              </div>
+
+              <button
+                onClick={() => updateSettingsMutation.mutate(systemSettings || currentSettings)}
+                disabled={updateSettingsMutation.isLoading}
                 style={{
                   width: '100%',
-                  padding: '8px 12px',
+                  padding: '10px',
                   borderRadius: '8px',
-                  border: `1px solid ${Colors.border}`,
-                  background: Colors.background,
-                  color: Colors.text,
+                  border: 'none',
+                  background: updateSettingsMutation.isLoading ? Colors.muted : Colors.primary,
+                  color: 'white',
+                  cursor: updateSettingsMutation.isLoading ? 'not-allowed' : 'pointer',
+                  fontWeight: '600',
                   fontSize: '14px',
                 }}
-              />
+              >
+                {updateSettingsMutation.isLoading ? 'Saving...' : 'Save Settings'}
+              </button>
             </div>
-
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', color: Colors.text, fontSize: '14px', fontWeight: '600', marginBottom: '8px' }}>Minimum Errand Amount (NGN)</label>
-              <input
-                type="number"
-                value={currentSettings.minimum_errand_amount || 1000}
-                onChange={(e) => setSystemSettings({ ...currentSettings, minimum_errand_amount: parseFloat(e.target.value) })}
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  border: `1px solid ${Colors.border}`,
-                  background: Colors.background,
-                  color: Colors.text,
-                  fontSize: '14px',
-                }}
-              />
-            </div>
-
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', color: Colors.text, fontSize: '14px', fontWeight: '600', marginBottom: '8px' }}>Maximum Errand Amount (NGN)</label>
-              <input
-                type="number"
-                value={currentSettings.maximum_errand_amount || 500000}
-                onChange={(e) => setSystemSettings({ ...currentSettings, maximum_errand_amount: parseFloat(e.target.value) })}
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  border: `1px solid ${Colors.border}`,
-                  background: Colors.background,
-                  color: Colors.text,
-                  fontSize: '14px',
-                }}
-              />
-            </div>
-
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', color: Colors.text, fontSize: '14px', fontWeight: '600', marginBottom: '8px' }}>Max Concurrent Errands</label>
-              <input
-                type="number"
-                value={currentSettings.max_concurrent_errands || 10}
-                onChange={(e) => setSystemSettings({ ...currentSettings, max_concurrent_errands: parseInt(e.target.value) })}
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  border: `1px solid ${Colors.border}`,
-                  background: Colors.background,
-                  color: Colors.text,
-                  fontSize: '14px',
-                }}
-              />
-            </div>
-
-            <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <input
-                type="checkbox"
-                checked={currentSettings.maintenance_mode || false}
-                onChange={(e) => setSystemSettings({ ...currentSettings, maintenance_mode: e.target.checked })}
-                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-              />
-              <label style={{ color: Colors.text, fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>Maintenance Mode</label>
-            </div>
-
-            <button
-              onClick={() => updateSettingsMutation.mutate(systemSettings || currentSettings)}
-              disabled={updateSettingsMutation.isLoading}
-              style={{
-                width: '100%',
-                padding: '10px',
-                borderRadius: '8px',
-                border: 'none',
-                background: updateSettingsMutation.isLoading ? Colors.muted : Colors.primary,
-                color: 'white',
-                cursor: updateSettingsMutation.isLoading ? 'not-allowed' : 'pointer',
-                fontWeight: '600',
-                fontSize: '14px',
-              }}
-            >
-              {updateSettingsMutation.isLoading ? 'Saving...' : 'Save Settings'}
-            </button>
-          </div>
+          </>
         )}
       </div>
     );
@@ -2139,10 +3362,651 @@ export default function AdminDashboard() {
                   <tr key={audit.id} style={{ borderBottom: `1px solid ${Colors.border}` }}>
                     <td style={{ padding: '12px', color: Colors.text, fontSize: '14px', fontWeight: '600', textTransform: 'capitalize' }}>{audit.action?.replace(/_/g, ' ')}</td>
                     <td style={{ padding: '12px', color: Colors.text, fontSize: '14px', textTransform: 'capitalize' }}>{audit.target_type}</td>
-                    <td style={{ padding: '12px', color: Colors.muted, fontSize: '12px' }}>{audit.details ? JSON.stringify(JSON.parse(audit.details)).slice(0, 50) + '...' : '-'}</td>
+                    <td style={{ padding: '12px', color: Colors.muted, fontSize: '12px' }}>
+                      {audit.details ? (
+                        <button
+                          onClick={() => setSelectedAudit(audit)}
+                          style={{
+                            background: Colors.cardBackground,
+                            color: Colors.text,
+                            border: `1px solid ${Colors.border}`,
+                            borderRadius: '6px',
+                            padding: '6px 10px',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            fontWeight: '600',
+                          }}
+                        >
+                          View
+                        </button>
+                      ) : '-'}
+                    </td>
                     <td style={{ padding: '12px', color: Colors.text, fontSize: '14px' }}>{new Date(audit.created_at).toLocaleString()}</td>
                   </tr>
                 ))}
+              </tbody>
+            </table>
+          </div>
+          <Pagination />
+        </>
+      )}
+
+      {selectedAudit && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px',
+          overflowY: 'auto',
+        }}>
+          <div style={{
+            background: '#ffffff',
+            border: `2px solid ${Colors.primary}`,
+            borderRadius: '12px',
+            padding: '24px',
+            maxWidth: '720px',
+            width: '100%',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            position: 'relative',
+          }}>
+            <button
+              onClick={() => setSelectedAudit(null)}
+              style={{
+                position: 'absolute',
+                top: '12px',
+                right: '12px',
+                background: 'transparent',
+                border: 'none',
+                fontSize: '24px',
+                cursor: 'pointer',
+                color: Colors.text,
+              }}
+            >
+              ✕
+            </button>
+            <h3 style={{ color: Colors.primary, marginBottom: '16px', fontSize: '20px', fontWeight: '700' }}>Audit Details</h3>
+            <div style={{ display: 'grid', gap: '10px' }}>
+              <div>
+                <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>ACTION</p>
+                <p style={{ margin: '6px 0 0', color: Colors.text, fontWeight: '600' }}>{selectedAudit.action?.replace(/_/g, ' ')}</p>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>TARGET TYPE</p>
+                  <p style={{ margin: '6px 0 0', color: Colors.text }}>{selectedAudit.target_type || '—'}</p>
+                </div>
+                <div>
+                  <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>TARGET ID</p>
+                  <p style={{ margin: '6px 0 0', color: Colors.text, fontFamily: 'monospace' }}>{selectedAudit.target_id || '—'}</p>
+                </div>
+              </div>
+              <div>
+                <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>DATE</p>
+                <p style={{ margin: '6px 0 0', color: Colors.text }}>{new Date(selectedAudit.created_at).toLocaleString()}</p>
+              </div>
+              <div>
+                <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>DETAILS</p>
+                <pre style={{
+                  margin: '8px 0 0',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: `1px solid ${Colors.border}`,
+                  background: Colors.background,
+                  color: Colors.text,
+                  fontSize: '12px',
+                  whiteSpace: 'pre-wrap',
+                }}>
+                  {(() => {
+                    const details = getAuditDetails(selectedAudit.details);
+                    if (!details) return '—';
+                    if (typeof details === 'string') return details;
+                    try {
+                      return JSON.stringify(details, null, 2);
+                    } catch (_) {
+                      return String(details);
+                    }
+                  })()}
+                </pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderAdminActivity = () => {
+    if (!adminActivityUnlocked) {
+      const lockedUntil = pinStatus?.locked_until ? new Date(pinStatus.locked_until) : null;
+      const isLocked = lockedUntil && lockedUntil > new Date();
+      const lockMessage = isLocked ? `PIN locked until ${lockedUntil.toLocaleString()}` : '';
+
+      return (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '24px' }}>
+          <div style={{
+            width: '100%',
+            maxWidth: '420px',
+            background: Colors.cardBackground,
+            border: `1px solid ${Colors.border}`,
+            borderRadius: '12px',
+            padding: '24px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+              <Lock size={20} color={Colors.primary} />
+              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: Colors.text }}>Admin Activity (PIN Required)</h3>
+            </div>
+            <p style={{ color: Colors.muted, fontSize: '13px', marginBottom: '16px' }}>
+              Enter your 4–6 digit PIN to view admin activity.
+            </p>
+            {lockMessage && (
+              <p style={{ color: Colors.error, fontSize: '12px', marginBottom: '12px' }}>{lockMessage}</p>
+            )}
+            {adminActivityError && (
+              <p style={{ color: Colors.error, fontSize: '12px', marginBottom: '12px' }}>{adminActivityError}</p>
+            )}
+            <input
+              type="password"
+              inputMode="numeric"
+              maxLength={6}
+              placeholder="Enter PIN"
+              value={adminActivityPinInput}
+              onChange={(e) => setAdminActivityPinInput(e.target.value.replace(/\D/g, ''))}
+              style={{
+                width: '100%',
+                border: `1px solid ${Colors.border}`,
+                background: Colors.background,
+                color: Colors.text,
+                borderRadius: '8px',
+                padding: '10px 12px',
+                fontSize: '14px',
+                marginBottom: '12px',
+              }}
+            />
+            <button
+              onClick={() => verifyAdminPinMutation.mutate(adminActivityPinInput.trim())}
+              disabled={verifyAdminPinMutation.isPending || !adminActivityPinInput.trim() || isLocked}
+              style={{
+                width: '100%',
+                background: Colors.primary,
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '10px 16px',
+                cursor: verifyAdminPinMutation.isPending || isLocked ? 'not-allowed' : 'pointer',
+                opacity: verifyAdminPinMutation.isPending || isLocked ? 0.7 : 1,
+                fontWeight: '600',
+                fontSize: '14px',
+              }}
+            >
+              {verifyAdminPinMutation.isPending ? 'Verifying...' : 'Unlock Admin Activity'}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+        <select
+          value={auditFilterInput.admin}
+          onChange={(e) => setAuditFilterInput((prev) => ({ ...prev, admin: e.target.value }))}
+          style={{
+            padding: '8px 12px',
+            borderRadius: '8px',
+            border: `1px solid ${Colors.border}`,
+            background: Colors.cardBackground,
+            color: Colors.text,
+            fontSize: '13px',
+          }}
+        >
+          <option value="">All Admins</option>
+          {admins.map((admin) => (
+            <option key={admin.id} value={admin.id}>
+              {(admin.full_name || admin.email || admin.id).toString()}
+            </option>
+          ))}
+        </select>
+        <input
+          type="text"
+          placeholder="Action (e.g., withdrawal_approved)"
+          value={auditFilterInput.action}
+          onChange={(e) => setAuditFilterInput((prev) => ({ ...prev, action: e.target.value }))}
+          style={{
+            padding: '8px 12px',
+            borderRadius: '8px',
+            border: `1px solid ${Colors.border}`,
+            background: Colors.cardBackground,
+            color: Colors.text,
+            fontSize: '13px',
+          }}
+        />
+        <input
+          type="text"
+          placeholder="Target type"
+          value={auditFilterInput.targetType}
+          onChange={(e) => setAuditFilterInput((prev) => ({ ...prev, targetType: e.target.value }))}
+          style={{
+            padding: '8px 12px',
+            borderRadius: '8px',
+            border: `1px solid ${Colors.border}`,
+            background: Colors.cardBackground,
+            color: Colors.text,
+            fontSize: '13px',
+          }}
+        />
+        <input
+          type="date"
+          value={auditFilterInput.dateFrom}
+          onChange={(e) => setAuditFilterInput((prev) => ({ ...prev, dateFrom: e.target.value }))}
+          style={{
+            padding: '8px 12px',
+            borderRadius: '8px',
+            border: `1px solid ${Colors.border}`,
+            background: Colors.cardBackground,
+            color: Colors.text,
+            fontSize: '13px',
+          }}
+        />
+        <input
+          type="date"
+          value={auditFilterInput.dateTo}
+          onChange={(e) => setAuditFilterInput((prev) => ({ ...prev, dateTo: e.target.value }))}
+          style={{
+            padding: '8px 12px',
+            borderRadius: '8px',
+            border: `1px solid ${Colors.border}`,
+            background: Colors.cardBackground,
+            color: Colors.text,
+            fontSize: '13px',
+          }}
+        />
+        <input
+          type="text"
+          placeholder="Search (target id, details, etc.)"
+          value={auditFilterInput.search}
+          onChange={(e) => setAuditFilterInput((prev) => ({ ...prev, search: e.target.value }))}
+          style={{
+            flex: 1,
+            minWidth: '200px',
+            padding: '8px 12px',
+            borderRadius: '8px',
+            border: `1px solid ${Colors.border}`,
+            background: Colors.cardBackground,
+            color: Colors.text,
+            fontSize: '13px',
+          }}
+        />
+        <button
+          onClick={applyAuditFilters}
+          style={{
+            background: Colors.primary,
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            padding: '8px 12px',
+            cursor: 'pointer',
+            fontWeight: '600',
+            fontSize: '13px',
+          }}
+        >
+          Apply
+        </button>
+        <button
+          onClick={resetAuditFilters}
+          style={{
+            background: Colors.cardBackground,
+            color: Colors.text,
+            border: `1px solid ${Colors.border}`,
+            borderRadius: '8px',
+            padding: '8px 12px',
+            cursor: 'pointer',
+            fontWeight: '600',
+            fontSize: '13px',
+          }}
+        >
+          Reset
+        </button>
+        <button
+          onClick={exportAuditsCsv}
+          style={{
+            background: Colors.success,
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            padding: '8px 12px',
+            cursor: 'pointer',
+            fontWeight: '600',
+            fontSize: '13px',
+          }}
+        >
+          Export CSV
+        </button>
+      </div>
+
+      {auditsLoading ? (
+        <p style={{ color: Colors.muted }}>Loading admin activity...</p>
+      ) : audits.length === 0 ? (
+        <p style={{ color: Colors.muted }}>No admin activity found</p>
+      ) : (
+        <>
+          <div style={{ overflowX: 'auto', borderRadius: '8px', border: `1px solid ${Colors.border}` }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead style={{ background: Colors.cardBackground, borderBottom: `1px solid ${Colors.border}` }}>
+                <tr>
+                  <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Admin</th>
+                  <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Action</th>
+                  <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Target</th>
+                  <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Details</th>
+                  <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {audits.map((audit) => (
+                  <tr key={audit.id} style={{ borderBottom: `1px solid ${Colors.border}` }}>
+                    <td style={{ padding: '12px', color: Colors.text, fontSize: '14px' }}>{getAuditAdminName(audit)}</td>
+                    <td style={{ padding: '12px', color: Colors.text, fontSize: '14px', fontWeight: '600', textTransform: 'capitalize' }}>{audit.action?.replace(/_/g, ' ')}</td>
+                    <td style={{ padding: '12px', color: Colors.text, fontSize: '12px' }}>
+                      <div style={{ fontWeight: 600, textTransform: 'capitalize' }}>{audit.target_type || '—'}</div>
+                      <div style={{ fontFamily: 'monospace' }}>{audit.target_id || '—'}</div>
+                    </td>
+                    <td style={{ padding: '12px', color: Colors.muted, fontSize: '12px' }}>
+                      {audit.details ? (
+                        <button
+                          onClick={() => setSelectedAudit(audit)}
+                          style={{
+                            background: Colors.cardBackground,
+                            color: Colors.text,
+                            border: `1px solid ${Colors.border}`,
+                            borderRadius: '6px',
+                            padding: '6px 10px',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            fontWeight: '600',
+                          }}
+                        >
+                          View
+                        </button>
+                      ) : '-'}
+                    </td>
+                    <td style={{ padding: '12px', color: Colors.text, fontSize: '14px' }}>{new Date(audit.created_at).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Pagination />
+        </>
+      )}
+
+      {selectedAudit && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px',
+          overflowY: 'auto',
+        }}>
+          <div style={{
+            background: '#ffffff',
+            border: `2px solid ${Colors.primary}`,
+            borderRadius: '12px',
+            padding: '24px',
+            maxWidth: '720px',
+            width: '100%',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            position: 'relative',
+          }}>
+            <button
+              onClick={() => setSelectedAudit(null)}
+              style={{
+                position: 'absolute',
+                top: '12px',
+                right: '12px',
+                background: 'transparent',
+                border: 'none',
+                fontSize: '24px',
+                cursor: 'pointer',
+                color: Colors.text,
+              }}
+            >
+              ✕
+            </button>
+            <h3 style={{ color: Colors.primary, marginBottom: '16px', fontSize: '20px', fontWeight: '700' }}>Audit Details</h3>
+            <div style={{ display: 'grid', gap: '10px' }}>
+              <div>
+                <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>ADMIN</p>
+                <p style={{ margin: '6px 0 0', color: Colors.text, fontWeight: '600' }}>{getAuditAdminName(selectedAudit)}</p>
+              </div>
+              <div>
+                <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>ACTION</p>
+                <p style={{ margin: '6px 0 0', color: Colors.text, fontWeight: '600' }}>{selectedAudit.action?.replace(/_/g, ' ')}</p>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>TARGET TYPE</p>
+                  <p style={{ margin: '6px 0 0', color: Colors.text }}>{selectedAudit.target_type || '—'}</p>
+                </div>
+                <div>
+                  <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>TARGET ID</p>
+                  <p style={{ margin: '6px 0 0', color: Colors.text, fontFamily: 'monospace' }}>{selectedAudit.target_id || '—'}</p>
+                </div>
+              </div>
+              <div>
+                <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>DATE</p>
+                <p style={{ margin: '6px 0 0', color: Colors.text }}>{new Date(selectedAudit.created_at).toLocaleString()}</p>
+              </div>
+              <div>
+                <p style={{ margin: 0, color: Colors.muted, fontSize: '12px', fontWeight: '600' }}>DETAILS</p>
+                <pre style={{
+                  margin: '8px 0 0',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: `1px solid ${Colors.border}`,
+                  background: Colors.background,
+                  color: Colors.text,
+                  fontSize: '12px',
+                  whiteSpace: 'pre-wrap',
+                }}>
+                  {(() => {
+                    const details = getAuditDetails(selectedAudit.details);
+                    if (!details) return '—';
+                    if (typeof details === 'string') return details;
+                    try {
+                      return JSON.stringify(details, null, 2);
+                    } catch (_) {
+                      return String(details);
+                    }
+                  })()}
+                </pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+    );
+  };
+
+  const renderAdmins = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div style={{ display: 'flex', gap: '12px' }}>
+        <div style={{ flex: 1, position: 'relative' }}>
+          <Search size={16} style={{ position: 'absolute', left: '12px', top: '12px', color: Colors.muted }} />
+          <input
+            type="text"
+            placeholder="Search by name, email, or admin ID..."
+            value={adminSearchInput}
+            onChange={(e) => setAdminSearchInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') applyAdminSearch();
+            }}
+            style={{
+              width: '100%',
+              paddingLeft: '36px',
+              padding: '10px 12px 10px 36px',
+              borderRadius: '8px',
+              border: `1px solid ${Colors.border}`,
+              background: Colors.cardBackground,
+              color: Colors.text,
+              fontSize: '14px',
+            }}
+          />
+        </div>
+        <button
+          onClick={applyAdminSearch}
+          style={{
+            background: Colors.primary,
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            padding: '10px 16px',
+            cursor: 'pointer',
+            fontWeight: '600',
+            fontSize: '14px',
+          }}
+        >
+          Search
+        </button>
+      </div>
+
+      {adminsLoading ? (
+        <p style={{ color: Colors.muted }}>Loading admins...</p>
+      ) : admins.length === 0 ? (
+        <p style={{ color: Colors.muted }}>No admins found</p>
+      ) : (
+        <>
+          <div style={{ overflowX: 'auto', borderRadius: '8px', border: `1px solid ${Colors.border}` }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead style={{ background: Colors.cardBackground, borderBottom: `1px solid ${Colors.border}` }}>
+                <tr>
+                  <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Name</th>
+                  <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Email</th>
+                  <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Role</th>
+                  <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Status</th>
+                  <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>PIN Last Used</th>
+                  <th style={{ padding: '12px', textAlign: 'center', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {admins.map((admin) => {
+                  const isSelf = admin.id === profile?.id;
+                  return (
+                    <tr key={admin.id} style={{ borderBottom: `1px solid ${Colors.border}` }}>
+                      <td style={{ padding: '12px', color: Colors.text, fontSize: '14px' }}>{admin.full_name || 'N/A'}</td>
+                      <td style={{ padding: '12px', color: Colors.text, fontSize: '12px' }}>{admin.email || 'N/A'}</td>
+                      <td style={{ padding: '12px', color: Colors.text, fontSize: '14px' }}>
+                        <select
+                          value={admin.role}
+                          disabled={isSelf || updateAdminRoleMutation.isPending}
+                          onChange={(e) => {
+                            const newRole = e.target.value;
+                            if (newRole === admin.role) return;
+                            if (!window.confirm(`Change role for ${admin.email || admin.id} to ${newRole}?`)) return;
+                            const pin = promptForPin('change admin role');
+                            if (!pin) return;
+                            updateAdminRoleMutation.mutate({ id: admin.id, role: newRole, pin });
+                          }}
+                          style={{
+                            padding: '6px 8px',
+                            borderRadius: '6px',
+                            border: `1px solid ${Colors.border}`,
+                            background: Colors.cardBackground,
+                            color: Colors.text,
+                            fontSize: '13px',
+                            cursor: isSelf ? 'not-allowed' : 'pointer',
+                          }}
+                        >
+                          {(() => {
+                            const allowed = ['support_admin', 'finance_admin', 'user'];
+                            const options = admin.role && !allowed.includes(admin.role)
+                              ? [admin.role, ...allowed]
+                              : allowed;
+                            return options.map((role) => (
+                              <option key={role} value={role} disabled={role === 'super_admin' || role === 'admin'}>
+                                {role}
+                              </option>
+                            ));
+                          })()}
+                        </select>
+                      </td>
+                      <td style={{ padding: '12px' }}>
+                        <span style={{
+                          display: 'inline-block',
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          background: admin.suspended ? Colors.error : Colors.success,
+                          color: 'white',
+                        }}>
+                          {admin.suspended ? 'Suspended' : 'Active'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px', color: Colors.text, fontSize: '12px' }}>
+                        {admin.admin_pin_last_used_at ? new Date(admin.admin_pin_last_used_at).toLocaleString() : '—'}
+                      </td>
+                      <td style={{ padding: '12px', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                          <button
+                            onClick={() => navigate(`/admin/admins/${admin.id}`)}
+                            style={{
+                              background: Colors.primary,
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              padding: '6px 10px',
+                              cursor: 'pointer',
+                              fontSize: '12px',
+                              fontWeight: '600',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                            }}
+                          >
+                            <Eye size={14} /> View
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (isSelf) return;
+                              const reason = window.prompt(`Reason for ${admin.suspended ? 'unsuspending' : 'suspending'} this admin?`);
+                              if (reason === null) return;
+                              suspendAdminMutation.mutate({
+                                id: admin.id,
+                                suspended: !admin.suspended,
+                                reason,
+                              });
+                            }}
+                            disabled={isSelf || suspendAdminMutation.isPending}
+                            style={{
+                              background: admin.suspended ? Colors.success : Colors.error,
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              padding: '6px 12px',
+                              cursor: isSelf ? 'not-allowed' : 'pointer',
+                              fontSize: '12px',
+                              fontWeight: '600',
+                              opacity: isSelf ? 0.6 : 1,
+                            }}
+                          >
+                            {admin.suspended ? 'Unsuspend' : 'Suspend'}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -2525,7 +4389,7 @@ export default function AdminDashboard() {
     );
   }
 
-  if (!profile || profile.role !== 'admin') {
+  if (!profile || !isAdminRole(profile.role)) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: Colors.background }}>
         <div style={{ textAlign: 'center', padding: '40px', borderRadius: '12px', background: Colors.cardBackground }}>
@@ -2542,9 +4406,166 @@ export default function AdminDashboard() {
       <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
         {/* Header */}
         <div style={{ marginBottom: '32px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-            <BrandLogo width={130} height={34} variant="dark" />
-            <h1 style={{ fontSize: '32px', fontWeight: '700', color: Colors.text, margin: 0 }}>Admin Dashboard</h1>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <BrandLogo width={130} height={34} variant="dark" />
+              <h1 style={{ fontSize: '32px', fontWeight: '700', color: Colors.text, margin: 0 }}>Admin Dashboard</h1>
+            </div>
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => setProfileMenuOpen((prev) => !prev)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  background: Colors.cardBackground,
+                  color: Colors.text,
+                  border: `1px solid ${Colors.border}`,
+                  borderRadius: '999px',
+                  padding: '6px 12px',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  fontSize: '13px',
+                }}
+              >
+                <UserCircle size={18} />
+                {profile?.first_name || profile?.email || 'Admin'}
+              </button>
+
+              {profileMenuOpen && (
+                <div style={{
+                  position: 'absolute',
+                  top: '110%',
+                  right: 0,
+                  width: '320px',
+                  background: '#ffffff',
+                  border: `1px solid ${Colors.border}`,
+                  borderRadius: '12px',
+                  padding: '16px',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                  zIndex: 50,
+                }}>
+                  <button
+                    onClick={() => setProfileMenuOpen(false)}
+                    style={{
+                      position: 'absolute',
+                      top: '10px',
+                      right: '10px',
+                      background: 'transparent',
+                      border: 'none',
+                      fontSize: '18px',
+                      cursor: 'pointer',
+                      color: Colors.text,
+                    }}
+                  >
+                    ×
+                  </button>
+                  <div style={{ marginBottom: '12px' }}>
+                    <div style={{ fontWeight: '700', color: Colors.text }}>
+                      {`${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() || 'Admin'}
+                    </div>
+                    <div style={{ fontSize: '12px', color: Colors.muted }}>{profile?.email || '—'}</div>
+                    <div style={{ fontSize: '12px', color: Colors.muted, marginTop: '4px', textTransform: 'capitalize' }}>
+                      Role: {profile?.role || 'admin'}
+                    </div>
+                  </div>
+
+                  {canFinance ? (
+                    <div style={{ borderTop: `1px solid ${Colors.border}`, paddingTop: '12px' }}>
+                      <div style={{ fontWeight: '700', fontSize: '13px', color: Colors.text, marginBottom: '8px' }}>Admin PIN</div>
+                      {pinStatusLoading && (
+                        <div style={{ fontSize: '12px', color: Colors.muted, marginBottom: '8px' }}>Loading PIN status...</div>
+                      )}
+                      {pinSetupError && (
+                        <div style={{ fontSize: '12px', color: Colors.error, marginBottom: '8px' }}>{pinSetupError}</div>
+                      )}
+                      {pinStatus?.has_pin && (
+                        <input
+                          type="password"
+                          inputMode="numeric"
+                          maxLength={6}
+                          placeholder="Current PIN"
+                          value={pinSetup.current}
+                          onChange={(e) => setPinSetup((prev) => ({ ...prev, current: e.target.value.replace(/\D/g, '') }))}
+                          style={{
+                            width: '100%',
+                            border: `1px solid ${Colors.border}`,
+                            background: Colors.background,
+                            color: Colors.text,
+                            borderRadius: '8px',
+                            padding: '8px 10px',
+                            fontSize: '12px',
+                            marginBottom: '8px',
+                          }}
+                        />
+                      )}
+                      <input
+                        type="password"
+                        inputMode="numeric"
+                        maxLength={6}
+                        placeholder="New PIN"
+                        value={pinSetup.next}
+                        onChange={(e) => setPinSetup((prev) => ({ ...prev, next: e.target.value.replace(/\D/g, '') }))}
+                        style={{
+                          width: '100%',
+                          border: `1px solid ${Colors.border}`,
+                          background: Colors.background,
+                          color: Colors.text,
+                          borderRadius: '8px',
+                          padding: '8px 10px',
+                          fontSize: '12px',
+                          marginBottom: '8px',
+                        }}
+                      />
+                      <input
+                        type="password"
+                        inputMode="numeric"
+                        maxLength={6}
+                        placeholder="Confirm New PIN"
+                        value={pinSetup.confirm}
+                        onChange={(e) => setPinSetup((prev) => ({ ...prev, confirm: e.target.value.replace(/\D/g, '') }))}
+                        style={{
+                          width: '100%',
+                          border: `1px solid ${Colors.border}`,
+                          background: Colors.background,
+                          color: Colors.text,
+                          borderRadius: '8px',
+                          padding: '8px 10px',
+                          fontSize: '12px',
+                          marginBottom: '8px',
+                        }}
+                      />
+                      <button
+                        onClick={() => setAdminPinMutation.mutate({
+                          current_pin: pinSetup.current,
+                          new_pin: pinSetup.next,
+                          confirm_pin: pinSetup.confirm,
+                        })}
+                        disabled={setAdminPinMutation.isPending || !pinSetup.next || !pinSetup.confirm || (pinStatus?.has_pin && !pinSetup.current)}
+                        style={{
+                          width: '100%',
+                          background: Colors.primary,
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '8px',
+                          padding: '8px 10px',
+                          cursor: setAdminPinMutation.isPending ? 'not-allowed' : 'pointer',
+                          opacity: setAdminPinMutation.isPending ? 0.7 : 1,
+                          fontWeight: '600',
+                          fontSize: '12px',
+                        }}
+                      >
+                        {setAdminPinMutation.isPending ? 'Saving...' : (pinStatus?.has_pin ? 'Change PIN' : 'Set PIN')}
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ borderTop: `1px solid ${Colors.border}`, paddingTop: '12px', fontSize: '12px', color: Colors.muted }}>
+                      PIN access not required for your role.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
           <p style={{ color: Colors.muted, fontSize: '14px' }}>Manage users, errands, payments, KYC, and system settings</p>
         </div>
@@ -2558,19 +4579,19 @@ export default function AdminDashboard() {
           overflowX: 'auto',
           paddingBottom: '16px',
         }}>
-          {['dashboard', 'users', 'errands', 'payments', 'disputes', 'transactions', 'kyc', 'bank-accounts', 'withdrawals', 'analytics', 'settings'].map((tab) => (
+          {tabConfig.filter((tab) => tab.show).map((tab) => (
             <button
-              key={tab}
+              key={tab.key}
               onClick={() => {
-                setActiveTab(tab);
-                setPageForTab(tab, 1);
+                setActiveTab(tab.key);
+                setPageForTab(tab.key, 1);
               }}
               style={{
                 padding: '10px 16px',
                 borderRadius: '8px',
                 border: 'none',
-                background: activeTab === tab ? Colors.primary : 'transparent',
-                color: activeTab === tab ? 'white' : Colors.text,
+                background: activeTab === tab.key ? Colors.primary : 'transparent',
+                color: activeTab === tab.key ? 'white' : Colors.text,
                 cursor: 'pointer',
                 fontWeight: '600',
                 fontSize: '14px',
@@ -2578,23 +4599,27 @@ export default function AdminDashboard() {
                 transition: 'all 0.2s',
               }}
             >
-              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              {tab.label}
             </button>
           ))}
         </div>
 
         {/* Content */}
         {activeTab === 'dashboard' && renderDashboard()}
-        {activeTab === 'users' && renderUsers()}
-        {activeTab === 'errands' && renderErrands()}
-        {activeTab === 'payments' && renderPayments()}
-        {activeTab === 'disputes' && renderDisputes()}
-        {activeTab === 'transactions' && renderTransactions()}
-        {activeTab === 'kyc' && renderKYC()}
-        {activeTab === 'bank-accounts' && renderBankAccounts()}
-        {activeTab === 'withdrawals' && <AdminWithdrawals />}
-        {activeTab === 'analytics' && renderAuditLogs()}
-        {activeTab === 'settings' && renderSettings()}
+        {activeTab === 'financials' && canFinance && renderFinancials()}
+        {activeTab === 'users' && canSupport && renderUsers()}
+        {activeTab === 'errands' && canSupport && renderErrands()}
+        {activeTab === 'payments' && canFinance && renderPayments()}
+        {activeTab === 'disputes' && canViewDisputes && renderDisputes()}
+        {activeTab === 'transactions' && canFinance && renderTransactions()}
+        {activeTab === 'kyc' && canFinance && renderKYC()}
+        {activeTab === 'bank-accounts' && canFinance && renderBankAccounts()}
+        {activeTab === 'withdrawals' && canFinance && <AdminWithdrawals />}
+        {activeTab === 'support' && canSupport && renderSupport()}
+        {activeTab === 'admin-activity' && canSuper && renderAdminActivity()}
+        {activeTab === 'admins' && canSuper && renderAdmins()}
+        {activeTab === 'analytics' && canSupport && renderAuditLogs()}
+        {activeTab === 'settings' && canSuper && renderSettings()}
       </div>
     </div>
   );

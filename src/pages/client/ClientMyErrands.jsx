@@ -21,7 +21,7 @@ const getStatusConfig = (status) => {
 export default function ClientMyErrands() {
   const navigate = useNavigate();
   const { theme, Colors } = useTheme();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
 
   useEffect(() => {
@@ -31,12 +31,14 @@ export default function ClientMyErrands() {
   }, []);
 
   const { data: errands = [], isLoading, error } = useQuery({
-    queryKey: ['client-errands', user?.id],
+    queryKey: ['client-errands', profile?.id],
     queryFn: async () => {
+      const postedByIds = [profile?.id, user?.id].filter(Boolean);
+      if (postedByIds.length === 0) return [];
       const { data, error } = await supabase
         .from('errands')
         .select('*')
-        .eq('posted_by', user.id)
+        .in('posted_by', postedByIds)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
