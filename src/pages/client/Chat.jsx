@@ -12,11 +12,11 @@ import { FiArrowLeft, FiMessageSquare, FiCheck } from 'react-icons/fi';
 import { fetchMessagingAccess } from '../../lib/contactAccess';
 
 export default function Chat() {
-  const { partnerId } = useParams();
+  const { partnerId, errandId } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { theme, Colors } = useTheme();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [messageText, setMessageText] = useState('');
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
   const messagesEndRef = useRef(null);
@@ -28,29 +28,30 @@ export default function Chat() {
   }, []);
 
   const { data: contactAccess } = useQuery({
-    queryKey: ['contact-access', user?.id, partnerId],
-    queryFn: async () => fetchMessagingAccess(supabase, user?.id, partnerId),
-    enabled: !!user?.id && !!partnerId,
+    queryKey: ['contact-access', user?.id, partnerId, errandId],
+    queryFn: async () => fetchMessagingAccess(supabase, user?.id, partnerId, errandId),
+    enabled: !!user?.id && !!partnerId && !!errandId,
   });
 
   const canMessage = !!contactAccess?.canMessage;
 
   // Fetch messages
   const { data: messages = [], isLoading } = useQuery({
-    queryKey: ['messages', user?.id, partnerId],
+    queryKey: ['messages', user?.id, partnerId, errandId],
     queryFn: async () => {
-      if (!user?.id || !partnerId) return [];
+      if (!user?.id || !partnerId || !errandId) return [];
 
       const { data, error } = await supabase
         .from('messages')
         .select('*')
+        .eq('errand_id', errandId)
         .or(`and(sender_id.eq.${user.id},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${user.id})`)
         .order('created_at', { ascending: true });
 
       if (error) throw error;
       return data || [];
     },
-    enabled: !!user?.id && !!partnerId,
+    enabled: !!user?.id && !!partnerId && !!errandId,
   });
 
   // Fetch partner profile
@@ -69,6 +70,22 @@ export default function Chat() {
       return data;
     },
     enabled: !!partnerId,
+  });
+
+  // Fetch errand info for context
+  const { data: errand } = useQuery({
+    queryKey: ['chat-errand', errandId],
+    queryFn: async () => {
+      if (!errandId) return null;
+      const { data, error } = await supabase
+        .from('errands')
+        .select('id,title,posted_by,assigned_to,status')
+        .eq('id', errandId)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!errandId,
   });
 
   // Send message
@@ -94,6 +111,7 @@ export default function Chat() {
           receiver_id: partnerId,
           content,
           type: 'text',
+          errand_id: errandId,
         }),
       });
 
@@ -106,7 +124,7 @@ export default function Chat() {
       return data.message;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['messages', user?.id, partnerId]);
+      queryClient.invalidateQueries(['messages', user?.id, partnerId, errandId]);
       setMessageText('');
     },
     onError: (err) => {
@@ -117,7 +135,7 @@ export default function Chat() {
   // Mark messages as read
   useEffect(() => {
     const markAsRead = async () => {
-      if (!user || !partnerId) return;
+      if (!user || !partnerId || !errandId) return;
 
       try {
         const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
@@ -133,11 +151,12 @@ export default function Chat() {
           },
           body: JSON.stringify({
             sender_id: partnerId,
+            errand_id: errandId,
           }),
         });
 
         if (response.ok) {
-          queryClient.invalidateQueries(['messages', user?.id, partnerId]);
+          queryClient.invalidateQueries(['messages', user?.id, partnerId, errandId]);
         }
       } catch (err) {
         console.error('[Chat] Error marking messages as read:', err);
@@ -146,7 +165,7 @@ export default function Chat() {
     };
 
     markAsRead();
-  }, [messages, user, partnerId, queryClient]);
+  }, [messages, user, partnerId, errandId, queryClient]);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -156,20 +175,20 @@ export default function Chat() {
 
   // Subscribe to new messages
   useEffect(() => {
-    if (!user || !partnerId) return;
+    if (!user || !partnerId || !errandId) return;
 
     const subscription = supabase
-      .channel(`messages:${user.id}:${partnerId}`)
+      .channel(`messages:${errandId}:${user.id}:${partnerId}`)
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
           table: 'messages',
-          filter: `or(and(sender_id.eq.${user.id},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${user.id}))`,
+          filter: `errand_id=eq.${errandId}`,
         },
         () => {
-          queryClient.invalidateQueries(['messages', user?.id, partnerId]);
+          queryClient.invalidateQueries(['messages', user?.id, partnerId, errandId]);
         }
       )
       .subscribe();
@@ -177,13 +196,30 @@ export default function Chat() {
     return () => {
       subscription.unsubscribe();
     };
-  }, [user, partnerId, queryClient]);
+  }, [user, partnerId, errandId, queryClient]);
 
   const handleSendMessage = (e) => {
     e.preventDefault();
     if (!messageText.trim()) return;
     sendMutation.mutate(messageText);
   };
+
+  if (!errandId) {
+    return (
+      <ThemedView style={{ minHeight: '100vh' }}>
+        <div style={{ maxWidth: '900px', margin: '0 auto', padding: isMobile ? '12px' : '20px', height: '100vh', display: 'flex', flexDirection: 'column' }}>
+          <ThemedText>This chat link is missing an errand. Please open chat from an errand.</ThemedText>
+          <Button
+            variant="ghost"
+            onClick={() => navigate(profile?.role === 'runner' ? '/runner/messages' : '/client/messages')}
+            style={{ marginTop: '12px', width: 'fit-content' }}
+          >
+            Back to Messages
+          </Button>
+        </div>
+      </ThemedView>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -221,7 +257,7 @@ export default function Chat() {
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '10px' : '16px', minWidth: 0, flex: 1 }}>
           <button
-            onClick={() => navigate('/client/messages')}
+            onClick={() => navigate(profile?.role === 'runner' ? '/runner/messages' : '/client/messages')}
             style={{
               background: 'none',
               border: 'none',
@@ -250,7 +286,7 @@ export default function Chat() {
               {partner ? partner.first_name : 'Chat'}
             </ThemedText>
             <ThemedText style={{ fontSize: '12px', opacity: 0.6, display: 'block', whiteSpace: isMobile ? 'normal' : 'nowrap' }}>
-              Keep communication inside Doabli
+              {errand?.title ? `Errand: ${errand.title}` : 'Keep communication inside Doabli'}
             </ThemedText>
           </div>
         </div>

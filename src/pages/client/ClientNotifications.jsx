@@ -139,8 +139,8 @@ export default function ClientNotifications() {
       const data = typeof notif.data === 'string'
         ? JSON.parse(notif.data)
         : (notif.data || {});
-      if (notif.type === 'messages' && data.sender_id) {
-        navigate(`/client/chat/${data.sender_id}`);
+      if (notif.type === 'messages' && data.sender_id && data.errand_id) {
+        navigate(`/client/chat/${data.errand_id}/${data.sender_id}`);
       } else if (data.errand_id) {
         navigate(`/client/errand-details/${data.errand_id}`);
       }

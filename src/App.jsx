@@ -150,6 +150,14 @@ function App() {
                 }
               />
               <Route
+                path="/client/chat/:errandId/:partnerId"
+                element={
+                  <ProtectedRoute requiredRole="client">
+                    <Chat />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="/client/chat/:partnerId"
                 element={
                   <ProtectedRoute requiredRole="client">
@@ -212,6 +220,14 @@ function App() {
                 element={
                   <ProtectedRoute requiredRole="runner">
                     <JobDetails />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/runner/chat/:errandId/:partnerId"
+                element={
+                  <ProtectedRoute requiredRole="runner">
+                    <Chat />
                   </ProtectedRoute>
                 }
               />

@@ -186,8 +186,8 @@ export default function RunnerNotifications() {
       const data = typeof notif.data === 'string'
         ? JSON.parse(notif.data)
         : (notif.data || {});
-      if (notif.type === 'messages' && data.sender_id) {
-        navigate(`/runner/chat/${data.sender_id}`);
+      if (notif.type === 'messages' && data.sender_id && data.errand_id) {
+        navigate(`/runner/chat/${data.errand_id}/${data.sender_id}`);
       } else if (notif.type === 'accepted' && data.errand_id) {
         navigate(`/runner/job-details/${data.errand_id}`);
       } else if (notif.type === 'dispute' && data.escrowId) {

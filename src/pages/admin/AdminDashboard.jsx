@@ -64,6 +64,12 @@ export default function AdminDashboard() {
   });
   const [pageSize, setPageSize] = useState(50);
   const [resolvingDispute, setResolvingDispute] = useState(null);
+  const [disputeFilter, setDisputeFilter] = useState('all');
+  const [paymentFilter, setPaymentFilter] = useState('all');
+  const [conversationOpen, setConversationOpen] = useState(false);
+  const [conversationLoading, setConversationLoading] = useState(false);
+  const [conversationError, setConversationError] = useState('');
+  const [conversationData, setConversationData] = useState(null);
   const [reviewingKYC, setReviewingKYC] = useState(null);
   const [kycReviewReason, setKycReviewReason] = useState('');
   const [kycAdminNotes, setKycAdminNotes] = useState('');
@@ -205,10 +211,40 @@ export default function AdminDashboard() {
     console.log('======================');
     
     return jsonData;
-  }, [apiBase]);
+  }, [apiBase, supabase]);
+
+  const openDispute = useCallback((dispute) => {
+    setResolvingDispute(dispute);
+    setAdminNotes('');
+    setConversationOpen(false);
+    setConversationLoading(false);
+    setConversationError('');
+    setConversationData(null);
+  }, []);
+
+  const loadConversation = useCallback(async () => {
+    if (!resolvingDispute?.id) return;
+    setConversationLoading(true);
+    setConversationError('');
+    try {
+      const data = await api(`/admin/escrows/${resolvingDispute.id}/conversation`);
+      setConversationData(data);
+      setConversationOpen(true);
+    } catch (err) {
+      setConversationError(err?.message || 'Failed to load conversation');
+    } finally {
+      setConversationLoading(false);
+    }
+  }, [api, resolvingDispute?.id]);
+
+  const conversationParticipants = conversationData?.participants || [];
+  const conversationEscrow = conversationData?.escrow || null;
+  const conversationMessages = conversationData?.messages || [];
+  const conversationClient = conversationParticipants.find((p) => p.id === conversationEscrow?.client_id) || null;
+  const conversationRunner = conversationParticipants.find((p) => p.id === conversationEscrow?.runner_id) || null;
 
   // Fetch dashboard stats
-  const { data: statsData, isLoading: statsLoading, refetch: refetchStats } = useQuery({
+  const { data: statsData, isLoading: statsLoading, error: statsError, refetch: refetchStats } = useQuery({
     queryKey: ['adminStats'],
     queryFn: () => api('/admin/stats'),
     staleTime: 1000 * 60 * 2, // 2 minutes
@@ -233,9 +269,11 @@ export default function AdminDashboard() {
     queryKey: ['adminEscrows', activeTab, activeTab === 'disputes' ? disputesPage : paymentsPage, getTabSearchQuery(activeTab)],
     queryFn: () => {
       const page = activeTab === 'disputes' ? disputesPage : paymentsPage;
-      const status = activeTab === 'disputes' ? 'disputed' : '';
+      const isDisputes = activeTab === 'disputes';
+      const status = isDisputes ? '' : '';
       const search = getTabSearchQuery(activeTab);
-      return api(`/admin/escrows?page=${page}&limit=${pageSize}${status ? `&status=${status}` : ''}${search ? `&search=${encodeURIComponent(search)}` : ''}`);
+      const disputeParam = isDisputes ? '&dispute=all' : '';
+      return api(`/admin/escrows?page=${page}&limit=${pageSize}${status ? `&status=${status}` : ''}${disputeParam}${search ? `&search=${encodeURIComponent(search)}` : ''}`);
     },
     enabled: (activeTab === 'payments' && canFinance) || (activeTab === 'disputes' && canViewDisputes),
     staleTime: 1000 * 60 * 2, // 2 minutes
@@ -355,6 +393,10 @@ export default function AdminDashboard() {
       refetchStats();
       setResolvingDispute(null);
       setAdminNotes('');
+      setConversationOpen(false);
+      setConversationLoading(false);
+      setConversationError('');
+      setConversationData(null);
     },
   });
 
@@ -866,7 +908,7 @@ export default function AdminDashboard() {
   };
 
   const feePct = stats.revenue > 0 ? (stats.platformFeeBaseTotal / stats.revenue) * 100 : 0;
-  const netProfit = stats.platformFeeBaseTotal || 0;
+  const netProfit = (stats.platformFeeTotal || 0) - (stats.payoutsTotal || 0);
   const monthly = Array.isArray(stats.monthly) ? stats.monthly : [];
   const maxMonthlyValue = monthly.reduce((max, m) => {
     const val = Math.max(m?.revenue || 0, m?.payouts || 0);
@@ -1020,21 +1062,28 @@ export default function AdminDashboard() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {statsLoading ? (
         <p style={{ color: Colors.muted }}>Loading dashboard stats...</p>
+      ) : statsError ? (
+        <div style={{ color: Colors.error, padding: '16px', border: `1px solid ${Colors.error}`, borderRadius: '8px' }}>
+          <p>Failed to load dashboard stats: {statsError.message}</p>
+          <button onClick={() => refetchStats()} style={{ marginTop: '8px', padding: '8px 16px', background: Colors.primary, color: 'white', border: 'none', borderRadius: '4px' }}>
+            Retry
+          </button>
+        </div>
       ) : (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
             {[
-              { icon: Users, label: 'Total Users', value: stats.totalUsers, color: Colors.primary },
-              { icon: UserCheck, label: 'Runners', value: stats.totalRunners, color: '#8B5CF6' },
-              { icon: Briefcase, label: 'Clients', value: stats.totalClients, color: '#06B6D4' },
-              { icon: Package, label: 'Total Errands', value: stats.totalErrands, color: Colors.warning },
-              { icon: Activity, label: 'Active Errands', value: stats.activeErrands, color: '#10B981' },
-              { icon: ShieldAlert, label: 'Active Disputes', value: stats.disputes, color: Colors.error },
-              { icon: CreditCard, label: 'Total Payments', value: stats.totalPayments, color: '#3B82F6', requiresFinance: true },
-              { icon: Banknote, label: 'Total Revenue', value: formatNaira(stats.revenue), color: Colors.success, requiresFinance: true },
-              { icon: BadgePercent, label: 'Platform Fees', value: formatNaira(stats.platformFeeBaseTotal), color: '#0EA5E9', requiresFinance: true },
-              { icon: AlertCircle, label: 'VAT (7.5%)', value: formatNaira(stats.vatTotal), color: '#F97316', requiresFinance: true },
-              { icon: BanknoteArrowUp, label: 'Paid Out', value: formatNaira(stats.payoutsTotal), color: '#F59E0B', requiresFinance: true },
+              { icon: Users, label: 'Total Users', value: statsData?.totalUsers || 0, color: Colors.primary },
+              { icon: UserCheck, label: 'Runners', value: statsData?.totalRunners || 0, color: '#8B5CF6' },
+              { icon: Briefcase, label: 'Clients', value: statsData?.totalClients || 0, color: '#06B6D4' },
+              { icon: Package, label: 'Total Errands', value: statsData?.totalErrands || 0, color: Colors.warning },
+              { icon: Activity, label: 'Active Errands', value: statsData?.activeErrands || 0, color: '#10B981' },
+              { icon: ShieldAlert, label: 'Active Disputes', value: statsData?.disputes || 0, color: Colors.error },
+              { icon: CreditCard, label: 'Total Payments', value: statsData?.totalPayments || 0, color: '#3B82F6', requiresFinance: true },
+              { icon: Banknote, label: 'Total Revenue', value: formatNaira(statsData?.revenue || 0), color: Colors.success, requiresFinance: true },
+              { icon: BadgePercent, label: 'Platform Fees', value: formatNaira(statsData?.platformFeeBaseTotal || 0), color: '#0EA5E9', requiresFinance: true },
+              { icon: AlertCircle, label: 'VAT (7.5%)', value: formatNaira(statsData?.vatTotal || 0), color: '#F97316', requiresFinance: true },
+              { icon: BanknoteArrowUp, label: 'Paid Out', value: formatNaira(statsData?.payoutsTotal || 0), color: '#F59E0B', requiresFinance: true },
               { icon: TrendingUp, label: 'Net Profit', value: formatNaira(netProfit), color: '#22C55E', requiresFinance: true },
             ]
               .filter((card) => !card.requiresFinance || canFinance)
@@ -1927,7 +1976,14 @@ export default function AdminDashboard() {
   );
 
   // RENDER: Payments
-  const renderPayments = () => (
+  const renderPayments = () => {
+    const filteredEscrows = escrows.filter((escrow) => {
+      if (paymentFilter === 'pending') return escrow.status === 'pending_payment';
+      if (paymentFilter === 'solved') return escrow.status && escrow.status !== 'pending_payment';
+      return true;
+    });
+
+    return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       <div style={{ display: 'flex', gap: '12px' }}>
         <div style={{ flex: 1, position: 'relative' }}>
@@ -1970,9 +2026,36 @@ export default function AdminDashboard() {
           Search
         </button>
       </div>
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        {[
+          { key: 'pending', label: 'Pending' },
+          { key: 'solved', label: 'Solved' },
+          { key: 'all', label: 'All' },
+        ].map((filter) => {
+          const active = paymentFilter === filter.key;
+          return (
+            <button
+              key={filter.key}
+              onClick={() => setPaymentFilter(filter.key)}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '999px',
+                border: `1px solid ${active ? Colors.primary : Colors.border}`,
+                background: active ? Colors.primary : Colors.cardBackground,
+                color: active ? 'white' : Colors.text,
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              {filter.label}
+            </button>
+          );
+        })}
+      </div>
       {escrowsLoading ? (
         <p style={{ color: Colors.muted }}>Loading escrows...</p>
-      ) : escrows.length === 0 ? (
+      ) : filteredEscrows.length === 0 ? (
         <p style={{ color: Colors.muted }}>No payments found</p>
       ) : (
         <>
@@ -1988,9 +2071,9 @@ export default function AdminDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {escrows.map((escrow) => (
+                {filteredEscrows.map((escrow) => (
                   <tr key={escrow.id} style={{ borderBottom: `1px solid ${Colors.border}` }}>
-                    <td style={{ padding: '12px', color: Colors.text, fontSize: '14px', fontFamily: 'monospace' }}>{escrow.errand_id?.slice(0, 8)}</td>
+                    <td style={{ padding: '12px', color: Colors.text, fontSize: '12px', fontFamily: 'monospace', maxWidth: '240px', wordBreak: 'break-all' }}>{escrow.errand_id || '—'}</td>
                     <td style={{ padding: '12px', color: Colors.text, fontSize: '14px', fontWeight: '600' }}>{formatNaira(escrow.amount)}</td>
                     <td style={{ padding: '12px' }}>
                       <span style={{
@@ -2186,10 +2269,18 @@ export default function AdminDashboard() {
       )}
     </div>
   );
+  };
 
   // RENDER: Disputes
   const renderDisputes = () => {
-    const disputes = escrows.filter(e => e.status === 'disputed');
+    const disputes = escrows
+      .filter(e => e.dispute_raised_at || e.dispute_resolved_at)
+      .sort((a, b) => new Date(b.dispute_raised_at || b.created_at) - new Date(a.dispute_raised_at || a.created_at));
+    const filteredDisputes = disputes.filter((dispute) => {
+      if (disputeFilter === 'pending') return !dispute.dispute_resolved_at;
+      if (disputeFilter === 'solved') return !!dispute.dispute_resolved_at;
+      return true;
+    });
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <div style={{ display: 'flex', gap: '12px' }}>
@@ -2197,7 +2288,7 @@ export default function AdminDashboard() {
             <Search size={16} style={{ position: 'absolute', left: '12px', top: '12px', color: Colors.muted }} />
             <input
               type="text"
-              placeholder="Search disputes by errand ID, reference, client, or runner..."
+              placeholder="Search disputes by errand ID, title, description, client/runner ID, or email..."
               value={getTabSearchInput('disputes')}
               onChange={(e) => {
                 setTabSearchInputValue('disputes', e.target.value);
@@ -2233,9 +2324,36 @@ export default function AdminDashboard() {
             Search
           </button>
         </div>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {[
+            { key: 'pending', label: 'Pending' },
+            { key: 'solved', label: 'Solved' },
+            { key: 'all', label: 'All' },
+          ].map((filter) => {
+            const active = disputeFilter === filter.key;
+            return (
+              <button
+                key={filter.key}
+                onClick={() => setDisputeFilter(filter.key)}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '999px',
+                  border: `1px solid ${active ? Colors.primary : Colors.border}`,
+                  background: active ? Colors.primary : Colors.cardBackground,
+                  color: active ? 'white' : Colors.text,
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                {filter.label}
+              </button>
+            );
+          })}
+        </div>
         {escrowsLoading ? (
           <p style={{ color: Colors.muted }}>Loading disputes...</p>
-        ) : disputes.length === 0 ? (
+        ) : filteredDisputes.length === 0 ? (
           <p style={{ color: Colors.muted }}>No active disputes</p>
         ) : (
           <>
@@ -2243,21 +2361,42 @@ export default function AdminDashboard() {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead style={{ background: Colors.cardBackground, borderBottom: `1px solid ${Colors.border}` }}>
                   <tr>
+                    <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Status</th>
                     <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Amount</th>
-                    <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Details</th>
+                    <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Errand</th>
+                    <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Description</th>
+                    <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Client</th>
+                    <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Runner</th>
                     <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Date</th>
                     <th style={{ padding: '12px', textAlign: 'center', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {disputes.map((dispute) => (
+                  {filteredDisputes.map((dispute) => (
                     <tr key={dispute.id} style={{ borderBottom: `1px solid ${Colors.border}` }}>
+                      <td style={{ padding: '12px', color: Colors.text, fontSize: '12px', fontWeight: '600' }}>
+                        {dispute.dispute_resolved_at ? `Resolved (${dispute.status})` : 'Open'}
+                      </td>
                       <td style={{ padding: '12px', color: Colors.text, fontSize: '14px', fontWeight: '600' }}>{formatNaira(dispute.amount)}</td>
-                      <td style={{ padding: '12px', color: Colors.muted, fontSize: '12px' }}>{dispute.dispute_details || dispute.dispute_reason || 'No reason provided'}</td>
-                      <td style={{ padding: '12px', color: Colors.text, fontSize: '14px' }}>{new Date(dispute.created_at).toLocaleDateString()}</td>
+                      <td style={{ padding: '12px', color: Colors.text, fontSize: '12px', fontFamily: 'monospace', maxWidth: '220px', wordBreak: 'break-all' }}>
+                        <div style={{ fontFamily: 'inherit', fontSize: '13px', fontWeight: 600 }}>{dispute.errand_title || '—'}</div>
+                        <div style={{ fontFamily: 'monospace', fontSize: '11px', opacity: 0.7 }}>{dispute.errand_id || '—'}</div>
+                      </td>
+                      <td style={{ padding: '12px', color: Colors.muted, fontSize: '12px', maxWidth: '240px' }}>
+                        {dispute.errand_description || '—'}
+                      </td>
+                      <td style={{ padding: '12px', color: Colors.text, fontSize: '12px', maxWidth: '200px' }}>
+                        <div style={{ fontWeight: 600 }}>{dispute.client_name || '—'}</div>
+                        <div style={{ fontSize: '11px', opacity: 0.7 }}>{dispute.client_email || '—'}</div>
+                      </td>
+                      <td style={{ padding: '12px', color: Colors.text, fontSize: '12px', maxWidth: '200px' }}>
+                        <div style={{ fontWeight: 600 }}>{dispute.runner_name || '—'}</div>
+                        <div style={{ fontSize: '11px', opacity: 0.7 }}>{dispute.runner_email || '—'}</div>
+                      </td>
+                      <td style={{ padding: '12px', color: Colors.text, fontSize: '12px' }}>{new Date(dispute.dispute_raised_at || dispute.created_at).toLocaleDateString()}</td>
                       <td style={{ padding: '12px', textAlign: 'center' }}>
                         <button
-                          onClick={() => setResolvingDispute(dispute)}
+                          onClick={() => openDispute(dispute)}
                           style={{
                             background: Colors.primary,
                             color: 'white',
@@ -2303,7 +2442,14 @@ export default function AdminDashboard() {
               position: 'relative',
             }}>
               <button
-                onClick={() => { setResolvingDispute(null); setAdminNotes(''); }}
+                onClick={() => {
+                  setResolvingDispute(null);
+                  setAdminNotes('');
+                  setConversationOpen(false);
+                  setConversationLoading(false);
+                  setConversationError('');
+                  setConversationData(null);
+                }}
                 style={{
                   position: 'absolute',
                   top: '16px',
@@ -2327,16 +2473,27 @@ export default function AdminDashboard() {
                 </div>
                 <div>
                   <p style={{ margin: 0, color: Colors.primary, fontSize: '12px', fontWeight: '600', textTransform: 'uppercase' }}>Errand</p>
-                  <p style={{ margin: '6px 0 0', color: Colors.text, fontFamily: 'monospace' }}>{resolvingDispute.errand_id?.slice(0, 8) || '—'}</p>
+                  <p style={{ margin: '6px 0 0', color: Colors.text, fontFamily: 'monospace', wordBreak: 'break-all' }}>{resolvingDispute.errand_id || '—'}</p>
                 </div>
                 <div>
                   <p style={{ margin: 0, color: Colors.primary, fontSize: '12px', fontWeight: '600', textTransform: 'uppercase' }}>Client</p>
-                  <p style={{ margin: '6px 0 0', color: Colors.text, fontFamily: 'monospace' }}>{resolvingDispute.client_id?.slice(0, 8) || '—'}</p>
+                  <p style={{ margin: '6px 0 0', color: Colors.text, fontFamily: 'monospace', wordBreak: 'break-all' }}>{resolvingDispute.client_id || '—'}</p>
+                  <p style={{ margin: '6px 0 0', color: Colors.muted, fontSize: '12px', wordBreak: 'break-all' }}>{resolvingDispute.client_email || '—'}</p>
                 </div>
                 <div>
                   <p style={{ margin: 0, color: Colors.primary, fontSize: '12px', fontWeight: '600', textTransform: 'uppercase' }}>Runner</p>
-                  <p style={{ margin: '6px 0 0', color: Colors.text, fontFamily: 'monospace' }}>{resolvingDispute.runner_id?.slice(0, 8) || '—'}</p>
+                  <p style={{ margin: '6px 0 0', color: Colors.text, fontFamily: 'monospace', wordBreak: 'break-all' }}>{resolvingDispute.runner_id || '—'}</p>
+                  <p style={{ margin: '6px 0 0', color: Colors.muted, fontSize: '12px', wordBreak: 'break-all' }}>{resolvingDispute.runner_email || '—'}</p>
                 </div>
+              </div>
+
+              <div style={{ marginBottom: '16px' }}>
+                <p style={{ margin: 0, color: Colors.primary, fontSize: '12px', fontWeight: '600', textTransform: 'uppercase' }}>Errand Title</p>
+                <p style={{ margin: '6px 0 0', color: Colors.text }}>{resolvingDispute.errand_title || '—'}</p>
+              </div>
+              <div style={{ marginBottom: '16px' }}>
+                <p style={{ margin: 0, color: Colors.primary, fontSize: '12px', fontWeight: '600', textTransform: 'uppercase' }}>Errand Description</p>
+                <p style={{ margin: '6px 0 0', color: Colors.text, whiteSpace: 'pre-wrap' }}>{resolvingDispute.errand_description || '—'}</p>
               </div>
 
               <div style={{ marginBottom: '16px' }}>
@@ -2351,11 +2508,11 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              {resolvingDispute.dispute_image_url && (
+              {(resolvingDispute.dispute_image_signed_url || resolvingDispute.dispute_image_url) && (
                 <div style={{ marginBottom: '16px' }}>
                   <p style={{ margin: 0, color: Colors.primary, fontSize: '12px', fontWeight: '600', textTransform: 'uppercase', marginBottom: '8px' }}>Attached Image</p>
-                  <a href={resolvingDispute.dispute_image_url} target="_blank" rel="noreferrer" style={{ display: 'block' }}>
-                    <img src={resolvingDispute.dispute_image_url} alt="dispute" style={{ maxWidth: '100%', maxHeight: '320px', borderRadius: '8px', border: `1px solid ${Colors.border}`, cursor: 'pointer' }} />
+                  <a href={resolvingDispute.dispute_image_signed_url || resolvingDispute.dispute_image_url} target="_blank" rel="noreferrer" style={{ display: 'block' }}>
+                    <img src={resolvingDispute.dispute_image_signed_url || resolvingDispute.dispute_image_url} alt="dispute" style={{ maxWidth: '100%', maxHeight: '320px', borderRadius: '8px', border: `1px solid ${Colors.border}`, cursor: 'pointer' }} />
                   </a>
                 </div>
               )}
@@ -2364,13 +2521,91 @@ export default function AdminDashboard() {
                 <div style={{ marginBottom: '16px', padding: '12px', background: Colors.background, borderRadius: '8px', border: `2px solid ${Colors.primary}` }}>
                   <p style={{ margin: 0, color: Colors.primary, fontSize: '12px', fontWeight: '600', textTransform: 'uppercase', marginBottom: '8px' }}>Runner's Defense</p>
                   <p style={{ margin: 0, color: Colors.text, whiteSpace: 'pre-wrap', fontSize: '14px' }}>{resolvingDispute.runner_defense_details}</p>
-                  {resolvingDispute.runner_defense_image_url && (
-                    <a href={resolvingDispute.runner_defense_image_url} target="_blank" rel="noreferrer" style={{ display: 'block', marginTop: '8px' }}>
-                      <img src={resolvingDispute.runner_defense_image_url} alt="defense" style={{ maxWidth: '100%', maxHeight: '240px', borderRadius: '8px', cursor: 'pointer' }} />
+                  {(resolvingDispute.runner_defense_image_signed_url || resolvingDispute.runner_defense_image_url) && (
+                    <a href={resolvingDispute.runner_defense_image_signed_url || resolvingDispute.runner_defense_image_url} target="_blank" rel="noreferrer" style={{ display: 'block', marginTop: '8px' }}>
+                      <img src={resolvingDispute.runner_defense_image_signed_url || resolvingDispute.runner_defense_image_url} alt="defense" style={{ maxWidth: '100%', maxHeight: '240px', borderRadius: '8px', cursor: 'pointer' }} />
                     </a>
                   )}
                 </div>
               )}
+
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                  <p style={{ margin: 0, color: Colors.primary, fontSize: '12px', fontWeight: '600', textTransform: 'uppercase' }}>Conversation</p>
+                  <button
+                    onClick={() => {
+                      if (conversationOpen) {
+                        setConversationOpen(false);
+                      } else {
+                        loadConversation();
+                      }
+                    }}
+                    disabled={conversationLoading}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: '6px',
+                      border: `1px solid ${Colors.border}`,
+                      background: 'transparent',
+                      color: Colors.text,
+                      cursor: conversationLoading ? 'not-allowed' : 'pointer',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {conversationLoading ? 'Loading...' : (conversationOpen ? 'Hide Conversation' : 'View Conversation')}
+                  </button>
+                </div>
+
+                {conversationError && (
+                  <p style={{ margin: '8px 0 0', color: Colors.error, fontSize: '12px' }}>
+                    {conversationError}
+                  </p>
+                )}
+
+                {conversationOpen && (
+                  <div style={{ marginTop: '10px', padding: '12px', background: Colors.background, borderRadius: '8px', border: `1px solid ${Colors.border}` }}>
+                    <div style={{ fontSize: '12px', color: Colors.muted, marginBottom: '10px', display: 'grid', gap: '4px' }}>
+                      <div>
+                        <strong style={{ color: Colors.text }}>Client:</strong>{' '}
+                        {conversationClient?.name || conversationClient?.email || conversationEscrow?.client_id || '—'}
+                      </div>
+                      <div>
+                        <strong style={{ color: Colors.text }}>Runner:</strong>{' '}
+                        {conversationRunner?.name || conversationRunner?.email || conversationEscrow?.runner_id || '—'}
+                      </div>
+                    </div>
+
+                    {conversationMessages.length === 0 ? (
+                      <p style={{ margin: 0, color: Colors.muted, fontSize: '13px' }}>No messages found for this errand.</p>
+                    ) : (
+                      <div style={{ display: 'grid', gap: '8px' }}>
+                        {conversationMessages.map((msg) => {
+                          const isClient = msg.sender_id === conversationEscrow?.client_id;
+                          const sender = isClient ? conversationClient : conversationRunner;
+                          const senderLabel = isClient ? 'Client' : 'Runner';
+                          const senderText = sender?.name || sender?.email || msg.sender_id;
+                          return (
+                            <div key={msg.id} style={{ padding: '10px', borderRadius: '8px', border: `1px solid ${Colors.border}`, background: '#ffffff' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', fontSize: '12px', color: Colors.muted, marginBottom: '6px' }}>
+                                <span style={{ color: Colors.text, fontWeight: 600 }}>{senderLabel}: {senderText}</span>
+                                <span>{new Date(msg.created_at).toLocaleString()}</span>
+                              </div>
+                              {msg.type && msg.type !== 'text' && (
+                                <div style={{ fontSize: '11px', color: Colors.muted, marginBottom: '6px' }}>
+                                  Type: {msg.type}
+                                </div>
+                              )}
+                              <div style={{ fontSize: '14px', color: Colors.text, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                                {msg.content || '—'}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
 
               <div style={{ marginBottom: '16px' }}>
                 <p style={{ margin: 0, color: Colors.primary, fontSize: '12px', fontWeight: '600', textTransform: 'uppercase', marginBottom: '8px' }}>Admin Notes (optional)</p>
@@ -2379,7 +2614,7 @@ export default function AdminDashboard() {
 
               {canResolveDisputes ? (
                 <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                {['released', 'refunded', 'split'].map((res) => (
+                {['released', 'refunded'].map((res) => (
                   <button
                     key={res}
                     onClick={() => {
@@ -2417,7 +2652,14 @@ export default function AdminDashboard() {
               )}
 
               <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={() => { setResolvingDispute(null); setAdminNotes(''); }} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: `1px solid ${Colors.border}`, background: 'transparent', color: Colors.text, cursor: 'pointer', fontWeight: 600 }}>Close for Now</button>
+                <button onClick={() => {
+                  setResolvingDispute(null);
+                  setAdminNotes('');
+                  setConversationOpen(false);
+                  setConversationLoading(false);
+                  setConversationError('');
+                  setConversationData(null);
+                }} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: `1px solid ${Colors.border}`, background: 'transparent', color: Colors.text, cursor: 'pointer', fontWeight: 600 }}>Close for Now</button>
               </div>
             </div>
           </div>
@@ -3331,10 +3573,10 @@ export default function AdminDashboard() {
               >
                 {updateSettingsMutation.isLoading ? 'Saving...' : 'Save Settings'}
               </button>
-            </div>
-          </>
-        )}
-      </div>
+          </div>
+        </>
+      )}
+    </div>
     );
   };
 

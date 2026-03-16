@@ -75,8 +75,8 @@ export default function RunnerProfile() {
 
   const { data: messagingAccess } = useQuery({
     queryKey: ['message-access', user?.id, runnerId],
-    queryFn: async () => fetchMessagingAccess(supabase, user?.id, runnerId),
-    enabled: !!user?.id && !!runnerId,
+    queryFn: async () => fetchMessagingAccess(supabase, user?.id, runnerId, errandId),
+    enabled: !!user?.id && !!runnerId && !!errandId,
   });
 
   const canMessage = !!messagingAccess?.canMessage;
@@ -398,12 +398,17 @@ export default function RunnerProfile() {
       <div style={{ display: 'grid', gap: '12px' }}>
         <Button
           variant="primary"
-          onClick={() => canMessage && navigate(`/client/chat/${runner.id}`)}
+          onClick={() => canMessage && navigate(`/client/chat/${errandId}/${runner.id}`)}
           disabled={!canMessage}
           style={{ width: '100%' }}
         >
           Contact Runner
         </Button>
+        {!errandId && (
+          <ThemedText style={{ fontSize: '12px', opacity: 0.6, display: 'block' }}>
+            Chat is available once an errand exists for this runner.
+          </ThemedText>
+        )}
 
         {applicationId && errandId && (
           <Button

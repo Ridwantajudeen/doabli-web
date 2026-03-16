@@ -94,6 +94,29 @@ export default function ErrandDetails() {
     enabled: !!id,
   });
 
+  const { data: escrowImages } = useQuery({
+    queryKey: ['escrow-images', escrow?.id],
+    queryFn: async () => {
+      if (!escrow?.id) return null;
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('Authentication required');
+      const res = await fetch(`${apiUrl}/api/escrow/${escrow.id}/images`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to load escrow images');
+      return data;
+    },
+    enabled: !!escrow?.id,
+  });
+
+  const disputeImageUrl = escrowImages?.dispute_image_signed_url || escrowImages?.dispute_image_url || escrow?.dispute_image_url || null;
+  const defenseImageUrl = escrowImages?.runner_defense_image_signed_url || escrowImages?.runner_defense_image_url || escrow?.runner_defense_image_url || null;
+
   // Fetch runner if assigned
   const { data: runner } = useQuery({
     queryKey: ['runner', errand?.assigned_to],
@@ -113,8 +136,8 @@ export default function ErrandDetails() {
 
   const { data: messagingAccess } = useQuery({
     queryKey: ['message-access', user?.id, runner?.id],
-    queryFn: async () => fetchMessagingAccess(supabase, user?.id, runner?.id),
-    enabled: !!user?.id && !!runner?.id,
+    queryFn: async () => fetchMessagingAccess(supabase, user?.id, runner?.id, errand?.id),
+    enabled: !!user?.id && !!runner?.id && !!errand?.id,
   });
 
   const { data: clientShareToRunner, refetch: refetchClientShare } = useQuery({
@@ -974,7 +997,7 @@ export default function ErrandDetails() {
       )}
 
       {/* Dispute Resolved in Client's Favor */}
-      {errand?.status === 'posted' && escrow && escrow.status === 'refunded' && escrow.dispute_resolved_at && (
+      {escrow && escrow.status === 'refunded' && escrow.dispute_resolved_at && (
         <ThemedCard style={{ marginBottom: '24px', backgroundColor: '#22c55e20', borderLeft: `4px solid #22c55e` }}>
           <ThemedText
             title
@@ -998,8 +1021,33 @@ export default function ErrandDetails() {
         </ThemedCard>
       )}
 
+      {/* Dispute Resolved in Runner's Favor */}
+      {escrow && escrow.status === 'released' && escrow.dispute_resolved_at && (
+        <ThemedCard style={{ marginBottom: '24px', backgroundColor: '#ef444420', borderLeft: `4px solid #ef4444` }}>
+          <ThemedText
+            title
+            style={{ fontSize: '18px', fontWeight: '600', marginBottom: '12px', display: 'block', color: '#ef4444' }}
+          >
+            Dispute Resolved
+          </ThemedText>
+          <ThemedText style={{ fontSize: '14px', marginBottom: '16px', display: 'block' }}>
+            The dispute has been resolved in favor of the runner. Payment has been released.
+          </ThemedText>
+          {escrow.admin_notes && (
+            <div style={{ backgroundColor: Colors.background, padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
+              <ThemedText style={{ fontSize: '12px', fontWeight: '600', opacity: 0.7, marginBottom: '6px', display: 'block', textTransform: 'uppercase' }}>
+                Admin Resolution Notes:
+              </ThemedText>
+              <ThemedText style={{ fontSize: '13px', display: 'block' }}>
+                {escrow.admin_notes}
+              </ThemedText>
+            </div>
+          )}
+        </ThemedCard>
+      )}
+
       {/* Job Completion Section */}
-      {escrow && escrow.runner_status === 'completed' && escrow.client_status === 'pending' && escrow.status !== 'refunded' && (
+      {escrow && escrow.runner_status === 'completed' && escrow.client_status === 'pending' && !escrow.dispute_resolved_at && escrow.status !== 'refunded' && (
         <ThemedCard style={{ marginBottom: '24px', backgroundColor: Colors.primary + '10', borderLeft: `4px solid ${Colors.primary}` }}>
           <ThemedText
             title
@@ -1026,6 +1074,41 @@ export default function ErrandDetails() {
             >
               Raise Dispute
             </Button>
+          </div>
+        </ThemedCard>
+      )}
+
+      {escrow && (escrow.status === 'disputed' || escrow.dispute_resolved_at) && (
+        <ThemedCard style={{ marginBottom: '24px', backgroundColor: '#ef444420', borderLeft: `4px solid #ef4444` }}>
+          <ThemedText
+            title
+            style={{ fontSize: '16px', fontWeight: '600', marginBottom: '8px', display: 'block', color: '#ef4444' }}
+          >
+            Dispute Evidence
+          </ThemedText>
+          <ThemedText style={{ fontSize: '13px', opacity: 0.8, marginBottom: '12px', display: 'block' }}>
+            This section shows the images attached to the dispute and the runner's defense (if provided).
+          </ThemedText>
+          <div style={{ display: 'grid', gap: '12px' }}>
+            {disputeImageUrl && (
+              <div>
+                <ThemedText style={{ fontSize: '12px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>Client Dispute Image</ThemedText>
+                <a href={disputeImageUrl} target="_blank" rel="noreferrer" style={{ display: 'block' }}>
+                  <img src={disputeImageUrl} alt="dispute evidence" style={{ maxWidth: '100%', maxHeight: '320px', borderRadius: '8px', border: `1px solid ${Colors.border}`, cursor: 'pointer' }} />
+                </a>
+              </div>
+            )}
+            {defenseImageUrl && (
+              <div>
+                <ThemedText style={{ fontSize: '12px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>Runner Defense Image</ThemedText>
+                <a href={defenseImageUrl} target="_blank" rel="noreferrer" style={{ display: 'block' }}>
+                  <img src={defenseImageUrl} alt="runner defense evidence" style={{ maxWidth: '100%', maxHeight: '260px', borderRadius: '8px', border: `1px solid ${Colors.border}`, cursor: 'pointer' }} />
+                </a>
+              </div>
+            )}
+            {!disputeImageUrl && !defenseImageUrl && (
+              <ThemedText style={{ fontSize: '13px', opacity: 0.7 }}>No dispute images have been attached yet.</ThemedText>
+            )}
           </div>
         </ThemedCard>
       )}
@@ -1409,7 +1492,7 @@ export default function ErrandDetails() {
         {runner && (
           <Button
             variant="primary"
-            onClick={() => canMessage && navigate(`/client/chat/${runner.id}`)}
+            onClick={() => canMessage && navigate(`/client/chat/${errand.id}/${runner.id}`)}
             disabled={!canMessage}
             style={{ width: '100%' }}
           >

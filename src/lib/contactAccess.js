@@ -15,7 +15,6 @@ export const MESSAGE_BLOCKED_ESCROW_STATUSES = [
   'releasable',
   'withdrawn',
   'refunded',
-  'split',
 ];
 
 export const maskEmail = (email) => {
@@ -33,13 +32,14 @@ export const maskPhone = (phone) => {
   return `${'*'.repeat(Math.max(0, digits.length - 4))}${digits.slice(-4)}`;
 };
 
-export async function fetchMessagingAccess(supabase, userId, partnerId) {
-  if (!userId || !partnerId) return { canMessage: false };
+export async function fetchMessagingAccess(supabase, userId, partnerId, errandId) {
+  if (!userId || !partnerId || !errandId) return { canMessage: false };
 
   const { data: errands, error } = await supabase
     .from('errands')
     .select('id,status')
     .in('status', ACTIVE_MESSAGE_STATUSES)
+    .eq('id', errandId)
     .or(`and(posted_by.eq.${userId},assigned_to.eq.${partnerId}),and(posted_by.eq.${partnerId},assigned_to.eq.${userId})`)
     .limit(10);
 

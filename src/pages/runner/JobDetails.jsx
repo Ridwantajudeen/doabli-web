@@ -123,6 +123,29 @@ export default function JobDetails() {
     enabled: !!job?.escrow_id,
   });
 
+  const { data: escrowImages } = useQuery({
+    queryKey: ['escrow-images', job?.escrow_id],
+    queryFn: async () => {
+      if (!job?.escrow_id) return null;
+      const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('Authentication required');
+      const res = await fetch(`${apiBase}/api/escrow/${job.escrow_id}/images`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to load escrow images');
+      return data;
+    },
+    enabled: !!job?.escrow_id,
+  });
+
+  const disputeImageUrl = escrowImages?.dispute_image_signed_url || escrowImages?.dispute_image_url || escrow?.dispute_image_url || null;
+  const defenseImageUrl = escrowImages?.runner_defense_image_signed_url || escrowImages?.runner_defense_image_url || escrow?.runner_defense_image_url || null;
+
   // Fetch client info
   const { data: client } = useQuery({
     queryKey: ['client', job?.posted_by],
@@ -788,7 +811,7 @@ export default function JobDetails() {
                 <FiCheck size={16} /> Dispute Resolved in Your Favor
               </ThemedText>
               <ThemedText style={{ fontSize: '13px', opacity: 0.7, marginBottom: '8px', display: 'block' }}>
-                Your dispute has been reviewed and you have been approved by admin. Your payment has been released to your account.
+                Your dispute has been reviewed and you have been approved by admin. Payment has been released and is available for withdrawal.
               </ThemedText>
               {withdrawalDetails && (
                 <div style={{ marginTop: '12px', padding: '12px', backgroundColor: 'rgba(255,255,255,0.5)', borderRadius: '6px' }}>
@@ -960,6 +983,41 @@ export default function JobDetails() {
               </ThemedText>
             </div>
           )}
+        </ThemedCard>
+      )}
+
+      {escrow && (escrow.status === 'disputed' || escrow.dispute_resolved_at) && (
+        <ThemedCard style={{ marginBottom: '24px', backgroundColor: '#ef444420', borderLeft: `4px solid #ef4444` }}>
+          <ThemedText
+            title
+            style={{ fontSize: '16px', fontWeight: '600', marginBottom: '8px', display: 'block', color: '#ef4444' }}
+          >
+            Dispute Evidence
+          </ThemedText>
+          <ThemedText style={{ fontSize: '13px', opacity: 0.8, marginBottom: '12px', display: 'block' }}>
+            Review the images attached to the dispute and your defense (if provided).
+          </ThemedText>
+          <div style={{ display: 'grid', gap: '12px' }}>
+            {disputeImageUrl && (
+              <div>
+                <ThemedText style={{ fontSize: '12px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>Client Dispute Image</ThemedText>
+                <a href={disputeImageUrl} target="_blank" rel="noreferrer" style={{ display: 'block' }}>
+                  <img src={disputeImageUrl} alt="client dispute evidence" style={{ maxWidth: '100%', maxHeight: '320px', borderRadius: '8px', border: `1px solid ${Colors.border}`, cursor: 'pointer' }} />
+                </a>
+              </div>
+            )}
+            {defenseImageUrl && (
+              <div>
+                <ThemedText style={{ fontSize: '12px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>Runner Defense Image</ThemedText>
+                <a href={defenseImageUrl} target="_blank" rel="noreferrer" style={{ display: 'block' }}>
+                  <img src={defenseImageUrl} alt="runner defense evidence" style={{ maxWidth: '100%', maxHeight: '260px', borderRadius: '8px', border: `1px solid ${Colors.border}`, cursor: 'pointer' }} />
+                </a>
+              </div>
+            )}
+            {!disputeImageUrl && !defenseImageUrl && (
+              <ThemedText style={{ fontSize: '13px', opacity: 0.7 }}>No dispute images have been attached yet.</ThemedText>
+            )}
+          </div>
         </ThemedCard>
       )}
 
