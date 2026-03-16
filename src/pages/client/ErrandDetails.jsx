@@ -1047,7 +1047,7 @@ export default function ErrandDetails() {
       )}
 
       {/* Job Completion Section */}
-      {escrow && escrow.runner_status === 'completed' && escrow.client_status === 'pending' && !escrow.dispute_resolved_at && escrow.status !== 'refunded' && (
+      {escrow && escrow.runner_status === 'completed' && escrow.client_status === 'pending' && !escrow.dispute_resolved_at && escrow.status !== 'refunded' && !escrow.dispute_raised_at && escrow.status !== 'disputed' && (
         <ThemedCard style={{ marginBottom: '24px', backgroundColor: Colors.primary + '10', borderLeft: `4px solid ${Colors.primary}` }}>
           <ThemedText
             title

@@ -451,9 +451,9 @@ export default function Chat() {
           style={{
             whiteSpace: 'nowrap',
             width: 'auto',
-            backgroundColor: '#22c55e',
-            borderColor: '#22c55e',
-            boxShadow: '0 4px 12px rgba(34, 197, 94, 0.35)',
+            backgroundColor: '#a78bfa',
+            borderColor: '#a78bfa',
+            boxShadow: '0 4px 12px rgba(167, 139, 250, 0.35)',
             color: '#ffffff',
           }}
         >
