@@ -38,8 +38,8 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 5, // 5 minutes - data stays fresh for 5 mins
-      gcTime: 1000 * 60 * 10, // 10 minutes - cache keeps data for 10 mins
+      staleTime: 1000 * 60 * 1, // 1 minute - keep lists reasonably fresh
+      gcTime: 1000 * 60 * 5, // 5 minutes - cache keeps data for 5 mins
       retry: 1, // Only retry once on failure
       retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
     },

@@ -118,6 +118,12 @@ export default function AdminDashboard() {
   const [pinSetupError, setPinSetupError] = useState('');
   const [selectedAudit, setSelectedAudit] = useState(null);
   const apiBase = getApiBase();
+  const adminQueryDefaults = {
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMount: 'always',
+  };
 
   const getPageForTab = (tab) => tabPages?.[tab] || 1;
   const setPageForTab = (tab, page) => {
@@ -247,7 +253,7 @@ export default function AdminDashboard() {
   const { data: statsData, isLoading: statsLoading, error: statsError, refetch: refetchStats } = useQuery({
     queryKey: ['adminStats'],
     queryFn: () => api('/admin/stats'),
-    staleTime: 1000 * 60 * 2, // 2 minutes
+    ...adminQueryDefaults,
   });
 
   // Fetch data from backend with pagination
@@ -255,14 +261,14 @@ export default function AdminDashboard() {
     queryKey: ['adminUsers', usersPage, userSearchQuery],
     queryFn: () => api(`/admin/users?page=${usersPage}&limit=${pageSize}${userSearchQuery ? `&search=${encodeURIComponent(userSearchQuery)}` : ''}`),
     enabled: activeTab === 'users' && canSupport,
-    staleTime: 1000 * 60 * 2, // 2 minutes
+    ...adminQueryDefaults,
   });
 
   const { data: errandsData = { errands: [], total: 0, page: 1 }, isLoading: errandsLoading, refetch: refetchErrands } = useQuery({
     queryKey: ['adminErrands', errandsPage, errandSearchQuery],
     queryFn: () => api(`/admin/errands?page=${errandsPage}&limit=${pageSize}${errandSearchQuery ? `&search=${encodeURIComponent(errandSearchQuery)}` : ''}`),
     enabled: activeTab === 'errands' && canSupport,
-    staleTime: 1000 * 60 * 2, // 2 minutes
+    ...adminQueryDefaults,
   });
 
   const { data: escrowsData = { escrows: [], total: 0, page: 1 }, isLoading: escrowsLoading, refetch: refetchEscrows } = useQuery({
@@ -276,7 +282,7 @@ export default function AdminDashboard() {
       return api(`/admin/escrows?page=${page}&limit=${pageSize}${status ? `&status=${status}` : ''}${disputeParam}${search ? `&search=${encodeURIComponent(search)}` : ''}`);
     },
     enabled: (activeTab === 'payments' && canFinance) || (activeTab === 'disputes' && canViewDisputes),
-    staleTime: 1000 * 60 * 2, // 2 minutes
+    ...adminQueryDefaults,
   });
 
   const { data: auditsData = { audits: [], total: 0, page: 1 }, isLoading: auditsLoading, refetch: refetchAudits } = useQuery({
@@ -301,14 +307,14 @@ export default function AdminDashboard() {
       });
     },
     enabled: (activeTab === 'analytics' && canSupport) || (activeTab === 'admin-activity' && canSuper && adminActivityUnlocked),
-    staleTime: 1000 * 60 * 2, // 2 minutes
+    ...adminQueryDefaults,
   });
 
   const { data: transactionsData = { transactions: [], total: 0, page: 1 }, isLoading: transactionsLoading, refetch: refetchTransactions } = useQuery({
     queryKey: ['adminTransactions', transactionsPage, getTabSearchQuery('transactions')],
     queryFn: () => api(`/admin/transactions?page=${transactionsPage}&limit=${pageSize}${getTabSearchQuery('transactions') ? `&search=${encodeURIComponent(getTabSearchQuery('transactions'))}` : ''}`),
     enabled: activeTab === 'transactions' && canFinance,
-    staleTime: 1000 * 60 * 2, // 2 minutes
+    ...adminQueryDefaults,
   });
 
   // ✅ UPDATED: Fetch KYC with filter
@@ -316,35 +322,35 @@ export default function AdminDashboard() {
     queryKey: ['adminKYC', kycPage, kycFilter, getTabSearchQuery('kyc')],
     queryFn: () => api(`/admin/kyc?page=${kycPage}&limit=${pageSize}&status=${kycFilter === 'all' ? '' : kycFilter}${getTabSearchQuery('kyc') ? `&search=${encodeURIComponent(getTabSearchQuery('kyc'))}` : ''}`),
     enabled: activeTab === 'kyc' && canFinance,
-    staleTime: 1000 * 60 * 2, // 2 minutes
+    ...adminQueryDefaults,
   });
 
   const { data: bankAccountsData = { bank_accounts: [], total: 0, page: 1 }, isLoading: bankAccountsLoading, refetch: refetchBankAccounts } = useQuery({
     queryKey: ['adminBankAccounts', bankAccountsPage, bankAccountFilter, getTabSearchQuery('bank-accounts')],
     queryFn: () => api(`/admin/bank-accounts?page=${bankAccountsPage}&limit=${pageSize}&status=${bankAccountFilter === 'all' ? '' : bankAccountFilter}${getTabSearchQuery('bank-accounts') ? `&search=${encodeURIComponent(getTabSearchQuery('bank-accounts'))}` : ''}`),
     enabled: activeTab === 'bank-accounts' && canFinance,
-    staleTime: 1000 * 60 * 2,
+    ...adminQueryDefaults,
   });
 
   const { data: supportData = { messages: [], total: 0, page: 1 }, isLoading: supportLoading, refetch: refetchSupport } = useQuery({
     queryKey: ['adminSupport', supportPage, supportFilter, getTabSearchQuery('support')],
     queryFn: () => api(`/admin/support/messages?page=${supportPage}&limit=${pageSize}${supportFilter && supportFilter !== 'all' ? `&status=${supportFilter}` : ''}${getTabSearchQuery('support') ? `&search=${encodeURIComponent(getTabSearchQuery('support'))}` : ''}`),
     enabled: activeTab === 'support' && canSupport,
-    staleTime: 1000 * 60 * 2,
+    ...adminQueryDefaults,
   });
 
   const { data: adminsData = { admins: [], total: 0, page: 1 }, isLoading: adminsLoading, refetch: refetchAdmins } = useQuery({
     queryKey: ['adminAdmins', adminsPage, adminSearchQuery],
     queryFn: () => api(`/admin/admins?page=${adminsPage}&limit=${pageSize}${adminSearchQuery ? `&search=${encodeURIComponent(adminSearchQuery)}` : ''}`),
     enabled: (activeTab === 'admins' || activeTab === 'admin-activity') && canSuper,
-    staleTime: 1000 * 60 * 2,
+    ...adminQueryDefaults,
   });
 
   const { data: settingsDataFromAPI, isLoading: settingsLoading, refetch: refetchSettings } = useQuery({
     queryKey: ['adminSettings'],
     queryFn: () => api('/admin/settings'),
     enabled: activeTab === 'settings' && canSuper,
-    staleTime: 1000 * 60 * 5, // 5 minutes - settings rarely change
+    ...adminQueryDefaults,
     onSuccess: (data) => {
       if (data) setSystemSettings(data);
     },
@@ -354,7 +360,7 @@ export default function AdminDashboard() {
     queryKey: ['adminPinStatus'],
     queryFn: () => api('/admin/security/pin-status'),
     enabled: (['financials', 'settings', 'analytics', 'admin-activity'].includes(activeTab) || profileMenuOpen) && canFinance,
-    staleTime: 1000 * 60, // 1 minute
+    ...adminQueryDefaults,
   });
 
   const pinStatus = pinStatusData || null;
@@ -363,7 +369,7 @@ export default function AdminDashboard() {
     queryKey: ['adminSupportDetail', selectedSupport?.id],
     queryFn: () => api(`/admin/support/messages/${selectedSupport.id}`),
     enabled: !!selectedSupport?.id && canSupport,
-    staleTime: 0,
+    ...adminQueryDefaults,
   });
 
   // Mutations
@@ -921,6 +927,7 @@ export default function AdminDashboard() {
     queryFn: () => api(`/admin/kyc/${reviewingKYC.id}/signed-urls`),
     enabled: !!reviewingKYC?.id && canFinance,
     select: (data) => data?.signed_urls,
+    ...adminQueryDefaults,
   });
 
   const kycSignedUrls = kycSignedUrlsData || null;

@@ -1,6 +1,7 @@
 import { useTheme } from '../context/ThemeContext';
 import { Colors } from '../constants/colors';
 import BrandLogo from './BrandLogo';
+import { FaInstagram, FaXTwitter, FaFacebookF } from 'react-icons/fa6';
 
 export default function Footer() {
   const { isDark } = useTheme();
@@ -19,6 +20,11 @@ export default function Footer() {
     Legal: [
       { label: 'Privacy', href: '#' },
       { label: 'Terms', href: '#' },
+    ],
+    Social: [
+      { label: 'Instagram', href: 'https://www.instagram.com/doabliapp?igsh=YW5tc3BhNmJqbGZu&utm_source=qr', icon: FaInstagram },
+      { label: 'X (Twitter)', href: 'https://x.com/doabliapp?s=21', icon: FaXTwitter },
+      { label: 'Facebook', href: 'https://www.facebook.com/share/18MC368Shp/?mibextid=LQQJ4d', icon: FaFacebookF },
     ],
     Support: [
       { label: 'support@doabli.com', href: 'mailto:support@doabli.com' },
@@ -56,9 +62,14 @@ export default function Footer() {
                   <li key={item.label}>
                     <a
                       href={item.href}
+                      target={item.href.startsWith('http') ? '_blank' : undefined}
+                      rel={item.href.startsWith('http') ? 'noreferrer' : undefined}
                       className="text-sm hover:opacity-100 opacity-75 transition-opacity"
                     >
-                      {item.label}
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                        {item.icon ? <item.icon size={16} /> : null}
+                        {item.label}
+                      </span>
                     </a>
                   </li>
                 ))}

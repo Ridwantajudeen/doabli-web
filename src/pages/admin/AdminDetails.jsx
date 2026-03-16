@@ -17,6 +17,12 @@ export default function AdminDetails() {
   const navigate = useNavigate();
   const { id } = useParams();
   const apiBase = getApiBase();
+  const adminQueryDefaults = {
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMount: 'always',
+  };
 
   const [pinInput, setPinInput] = useState('');
   const [pin, setPin] = useState('');
@@ -50,7 +56,7 @@ export default function AdminDetails() {
     queryKey: ['adminDetails', id],
     queryFn: () => api(`/admin/admins/${id}`),
     enabled: !!id && canSuper,
-    staleTime: 1000 * 60,
+    ...adminQueryDefaults,
   });
 
   const admin = adminData?.admin || null;
@@ -61,7 +67,7 @@ export default function AdminDetails() {
       headers: pin ? { 'x-admin-pin': pin } : undefined,
     }),
     enabled: !!id && canSuper && pinUnlocked,
-    staleTime: 1000 * 60 * 2,
+    ...adminQueryDefaults,
   });
 
   const audits = auditsData.audits || [];

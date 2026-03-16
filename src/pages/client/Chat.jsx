@@ -31,6 +31,9 @@ export default function Chat() {
     queryKey: ['contact-access', user?.id, partnerId, errandId],
     queryFn: async () => fetchMessagingAccess(supabase, user?.id, partnerId, errandId),
     enabled: !!user?.id && !!partnerId && !!errandId,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnMount: 'always',
   });
 
   const canMessage = !!contactAccess?.canMessage;
@@ -52,6 +55,8 @@ export default function Chat() {
       return data || [];
     },
     enabled: !!user?.id && !!partnerId && !!errandId,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 
   // Fetch partner profile

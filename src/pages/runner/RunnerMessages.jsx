@@ -85,6 +85,8 @@ export default function RunnerMessages() {
       });
     },
     enabled: !!user?.id,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 
   return (

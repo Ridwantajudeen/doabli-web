@@ -84,6 +84,8 @@ export default function ClientMessages() {
       });
     },
     enabled: !!user?.id,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 
 

@@ -34,6 +34,12 @@ export default function AdminUserDetails() {
   const adminLevel = getAdminLevel(adminProfile?.role);
   const canSupport = adminLevel >= 1;
   const canFinance = adminLevel >= 2;
+  const adminQueryDefaults = {
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMount: 'always',
+  };
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['adminUserDetails', id],
@@ -52,6 +58,7 @@ export default function AdminUserDetails() {
       return res.json();
     },
     enabled: !!id,
+    ...adminQueryDefaults,
   });
 
   const suspendMutation = useMutation({

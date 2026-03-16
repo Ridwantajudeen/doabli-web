@@ -19,6 +19,12 @@ export default function AdminWithdrawals() {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(50);
   const apiBase = getApiBase();
+  const adminQueryDefaults = {
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMount: 'always',
+  };
 
   // Fetch withdrawals
   const { data: withdrawalsData = { withdrawals: [], total: 0, page: 1 }, isLoading } = useQuery({
@@ -41,6 +47,7 @@ export default function AdminWithdrawals() {
       }
       return res.json();
     },
+    ...adminQueryDefaults,
   });
   const withdrawals = withdrawalsData.withdrawals || [];
   const totalPages = Math.ceil((withdrawalsData.total || 0) / pageSize);
