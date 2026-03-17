@@ -140,6 +140,41 @@ export const getCurrentSession = async () => {
   }
 };
 
+export const recordPolicyAcceptance = async ({
+  userId,
+  policyType,
+  policyVersion,
+  source = 'web',
+  method = 'checkbox',
+  userAgent = null,
+  ipAddress = null,
+}) => {
+  if (!userId || !policyType || !policyVersion) {
+    return { error: 'Missing policy acceptance fields' };
+  }
+  try {
+    const payload = {
+      user_id: userId,
+      policy_type: policyType,
+      policy_version: policyVersion,
+      accepted_at: new Date().toISOString(),
+      user_agent: userAgent,
+      ip_address: ipAddress,
+      source,
+      method,
+    };
+
+    const { error } = await supabase
+      .from('policy_acceptances')
+      .upsert([payload], { onConflict: 'user_id,policy_type,policy_version' });
+
+    if (error) throw new Error(error.message);
+    return { error: null };
+  } catch (err) {
+    return { error: err.message };
+  }
+};
+
 // Profile helpers
 export const createProfile = async (userId, profileData) => {
   try {

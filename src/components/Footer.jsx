@@ -18,8 +18,10 @@ export default function Footer() {
       { label: 'Contact', href: '/#contact' },
     ],
     Legal: [
-      { label: 'Privacy', href: '#' },
-      { label: 'Terms', href: '#' },
+      { label: 'Privacy', href: '/privacy' },
+      { label: 'Terms', href: '/terms' },
+      { label: 'Data Policy', href: '/data-policy' },
+      { label: 'Refunds', href: '/refunds' },
     ],
     Social: [
       { label: 'Instagram', href: 'https://www.instagram.com/doabliapp?igsh=YW5tc3BhNmJqbGZu&utm_source=qr', icon: FaInstagram },
@@ -90,11 +92,17 @@ export default function Footer() {
             &copy; {currentYear} Doabli. All rights reserved.
           </p>
           <div className="flex gap-6 mt-4 md:mt-0">
-            <a href="#" className="hover:opacity-100 opacity-75 transition-opacity">
+            <a href="/privacy" className="hover:opacity-100 opacity-75 transition-opacity">
               Privacy Policy
             </a>
-            <a href="#" className="hover:opacity-100 opacity-75 transition-opacity">
+            <a href="/terms" className="hover:opacity-100 opacity-75 transition-opacity">
               Terms of Service
+            </a>
+            <a href="/data-policy" className="hover:opacity-100 opacity-75 transition-opacity">
+              Data Policy
+            </a>
+            <a href="/refunds" className="hover:opacity-100 opacity-75 transition-opacity">
+              Refunds
             </a>
           </div>
         </div>

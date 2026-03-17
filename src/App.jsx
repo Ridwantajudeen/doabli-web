@@ -14,6 +14,10 @@ import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import CompleteProfile from './pages/CompleteProfile';
 import PaystackReturn from './pages/PaystackReturn';
+import Privacy from './pages/Privacy';
+import Terms from './pages/Terms';
+import DataPolicy from './pages/DataPolicy';
+import Refunds from './pages/Refunds';
 
 // Client Pages
 import ClientDashboard from './pages/ClientDashboard';
@@ -67,6 +71,10 @@ function App() {
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/paystack-return" element={<PaystackReturn />} />
+              <Route path="/privacy" element={<Privacy />} />
+              <Route path="/terms" element={<Terms />} />
+              <Route path="/data-policy" element={<DataPolicy />} />
+              <Route path="/refunds" element={<Refunds />} />
               <Route
                 path="/complete-profile"
                 element={

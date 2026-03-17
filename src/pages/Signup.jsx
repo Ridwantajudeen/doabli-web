@@ -7,6 +7,12 @@ import Button from '../components/Button';
 import { ThemedView, ThemedCard, ThemedText, ThemedTextInput } from '../components/ThemedComponents';
 import { friendlyMessage } from '../lib/notify';
 import BrandLogo from '../components/BrandLogo';
+import {
+  PRIVACY_POLICY_VERSION,
+  TERMS_OF_SERVICE_VERSION,
+  DATA_POLICY_VERSION,
+} from '../constants/policies';
+import { recordPolicyAcceptance } from '../lib/supabase';
 
 const GoogleIcon = ({ size = 18 }) => (
   <svg
@@ -41,6 +47,7 @@ export default function Signup() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [role, setRole] = useState('client');
+  const [policiesAccepted, setPoliciesAccepted] = useState(false);
 
   // UI state
   const [showPassword, setShowPassword] = useState(false);
@@ -101,6 +108,10 @@ export default function Signup() {
       newErrors.confirmPassword = 'Passwords do not match.';
     }
 
+    if (!policiesAccepted) {
+      newErrors.policiesAccepted = 'You must agree to the policies to continue.';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -127,6 +138,33 @@ export default function Signup() {
       } else if (!user) {
         setServerMessage('Signup failed. Please try again.');
       } else {
+        const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : null;
+        const policyResults = await Promise.all([
+          recordPolicyAcceptance({
+            userId: user.id,
+            policyType: 'privacy',
+            policyVersion: PRIVACY_POLICY_VERSION,
+            userAgent,
+          }),
+          recordPolicyAcceptance({
+            userId: user.id,
+            policyType: 'terms',
+            policyVersion: TERMS_OF_SERVICE_VERSION,
+            userAgent,
+          }),
+          recordPolicyAcceptance({
+            userId: user.id,
+            policyType: 'data',
+            policyVersion: DATA_POLICY_VERSION,
+            userAgent,
+          }),
+        ]);
+
+        const policyFailure = policyResults.find((r) => r?.error);
+        if (policyFailure) {
+          console.warn('Policy acceptance record failed:', policyFailure.error);
+        }
+
         setServerMessage('Signup successful! We sent a verification link to your email. Open it to verify your account, then log in. Check your spam/junk if you do not see it.');
         setErrors({});
 
@@ -138,6 +176,7 @@ export default function Signup() {
         setPassword('');
         setConfirmPassword('');
         setRole('client');
+        setPoliciesAccepted(false);
 
         // Navigate to dashboard or login after brief delay
         setTimeout(() => {
@@ -162,7 +201,8 @@ export default function Signup() {
     lastName.trim() &&
     validatePhone(phone) &&
     validateEmail(email) &&
-    isPasswordValid;
+    isPasswordValid &&
+    policiesAccepted;
 
   const selectedRole = roles.find((r) => r.value === role);
 
@@ -319,6 +359,40 @@ export default function Signup() {
               icon={showConfirmPassword ? <FiEyeOff /> : <FiEye />}
               iconOnClick={() => setShowConfirmPassword(!showConfirmPassword)}
             />
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={policiesAccepted}
+                  onChange={(e) => {
+                    setPoliciesAccepted(e.target.checked);
+                    if (errors.policiesAccepted) clearError('policiesAccepted');
+                  }}
+                  style={{ marginTop: '4px' }}
+                />
+                <span style={{ fontSize: '13px', opacity: 0.8 }}>
+                  I agree to the{' '}
+                  <Link to="/terms" style={{ color: Colors.primary }}>
+                    Terms of Service
+                  </Link>
+                  ,{' '}
+                  <Link to="/privacy" style={{ color: Colors.primary }}>
+                    Privacy Policy
+                  </Link>
+                  , and{' '}
+                  <Link to="/data-policy" style={{ color: Colors.primary }}>
+                    Data Policy
+                  </Link>
+                  .
+                </span>
+              </label>
+              {errors.policiesAccepted && (
+                <ThemedText style={{ color: Colors.warning, fontSize: '13px', marginTop: '6px', display: 'block' }}>
+                  {errors.policiesAccepted}
+                </ThemedText>
+              )}
+            </div>
 
             {/* Role Selection */}
             <label
