@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -9,11 +9,11 @@ import RunnerMessages from './runner/RunnerMessages';
 import RunnerNotifications from './runner/RunnerNotifications';
 import RunnerProfile from './runner/RunnerProfile';
 import Support from './Support';
-import { Menu, X } from 'lucide-react';
+import { Menu, X, Sun, Moon } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
-import { useEffect } from 'react';
 import BrandLogo from '../components/BrandLogo';
+import { useLocation } from 'react-router-dom';
 
 function useUnreadCount(userId) {
   const queryClient = useQueryClient();
@@ -56,11 +56,12 @@ function useUnreadCount(userId) {
 }
 
 export default function RunnerDashboard() {
-  const { theme, Colors } = useTheme();
+  const { theme, Colors, isDark, toggleTheme } = useTheme();
   const { logout, user } = useAuth();
   const [activeTab, setActiveTab] = useState('home');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const queryClient = useQueryClient();
+  const location = useLocation();
 
   const unreadCount = useUnreadCount(user?.id);
 
@@ -73,6 +74,15 @@ export default function RunnerDashboard() {
       }, 2000);
     }
   };
+
+  useEffect(() => {
+    const path = location.pathname;
+    if (path.startsWith('/runner/applications')) setActiveTab('applications');
+    else if (path.startsWith('/runner/messages')) setActiveTab('messages');
+    else if (path.startsWith('/runner/notifications')) setActiveTab('notifications');
+    else if (path.startsWith('/runner/profile')) setActiveTab('profile');
+    else if (path.startsWith('/runner')) setActiveTab('home');
+  }, [location.pathname]);
 
   const tabs = [
     { id: 'home',          label: 'Available Jobs' },
@@ -130,6 +140,18 @@ export default function RunnerDashboard() {
               )}
             </button>
           ))}
+          <button
+            onClick={toggleTheme}
+            className="p-2 rounded-full border transition"
+            style={{
+              borderColor: theme.uiBackground,
+              color: theme.text,
+            }}
+            aria-label="Toggle theme"
+            type="button"
+          >
+            {isDark ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
           <button
             onClick={logout}
             className="px-4 py-2 rounded-lg text-white"
@@ -211,6 +233,25 @@ export default function RunnerDashboard() {
                 )}
               </button>
             ))}
+            <button
+              onClick={toggleTheme}
+              style={{
+                background: theme.uiBackground,
+                border: 'none',
+                textAlign: 'left',
+                fontSize: '15px',
+                color: theme.text,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 8px',
+                borderRadius: '10px',
+              }}
+            >
+              {isDark ? <Sun size={16} /> : <Moon size={16} />}
+              {isDark ? 'Light mode' : 'Dark mode'}
+            </button>
             <button
               onClick={() => { logout(); setMobileMenuOpen(false); }}
               style={{

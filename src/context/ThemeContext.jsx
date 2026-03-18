@@ -26,6 +26,18 @@ export function ThemeProvider({ children }) {
   };
 
   const theme = isDark ? Colors.dark : Colors.light;
+  
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty('--bg', theme.background);
+    root.style.setProperty('--nav', theme.navBackground);
+    root.style.setProperty('--surface', theme.uiBackground);
+    root.style.setProperty('--text', theme.text);
+    root.style.setProperty('--title', theme.title);
+    root.style.setProperty('--brand', Colors.primary);
+    root.style.setProperty('--danger', Colors.warning);
+    root.style.colorScheme = isDark ? 'dark' : 'light';
+  }, [theme, isDark]);
 
   const value = {
     isDark,

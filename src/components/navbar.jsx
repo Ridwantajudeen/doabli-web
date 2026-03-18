@@ -4,18 +4,18 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Button from './Button';
 import BrandLogo from './BrandLogo';
 import { Colors } from '../constants/colors';
-import { Menu, X } from 'lucide-react';
+import { Menu, X, Sun, Moon } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const { isDark } = useTheme();
+  const { isDark, toggleTheme, theme } = useTheme();
 
   const colors = isDark ? Colors.dark : Colors.light;
-  const navTextColor = scrolled ? '#ffffff' : Colors.light.title;
-  const mobileMenuBg = scrolled ? Colors.primary : Colors.light.navBackground;
-  const mobileMenuText = scrolled ? '#ffffff' : Colors.light.title;
+  const navTextColor = scrolled ? '#ffffff' : theme.title;
+  const mobileMenuBg = scrolled ? Colors.primary : theme.navBackground;
+  const mobileMenuText = scrolled ? '#ffffff' : theme.title;
   const navBackground = scrolled ? Colors.primary : 'transparent';
   const signInButtonStyle = scrolled
     ? {
@@ -58,7 +58,11 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
-          <BrandLogo width={120} height={30} variant={scrolled ? 'light' : 'dark'} />
+          <BrandLogo
+            width={120}
+            height={30}
+            variant={scrolled ? 'light' : isDark ? 'light' : 'dark'}
+          />
 
           {/* Desktop Menu */}
           <div className="hidden md:flex gap-8">
@@ -75,7 +79,19 @@ export default function Navbar() {
           </div>
 
           {/* CTA Buttons */}
-          <div className="hidden md:flex gap-3">
+          <div className="hidden md:flex gap-3 items-center">
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-full border transition"
+              style={{
+                borderColor: scrolled ? 'rgba(255,255,255,0.4)' : theme.uiBackground,
+                color: navTextColor,
+              }}
+              aria-label="Toggle theme"
+              type="button"
+            >
+              {isDark ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
             <Link to="/login">
               <Button variant="ghost" size="md" style={signInButtonStyle}>
                 Sign In
@@ -120,6 +136,14 @@ export default function Navbar() {
               ))}
 
               <div className="flex flex-col gap-2 pt-4 border-t" style={{ borderColor: colors.uiBackground }}>
+                <button
+                  onClick={toggleTheme}
+                  className="flex items-center gap-2 text-sm font-semibold"
+                  style={{ color: mobileMenuText }}
+                >
+                  {isDark ? <Sun size={16} /> : <Moon size={16} />}
+                  {isDark ? 'Light mode' : 'Dark mode'}
+                </button>
                 <Link to="/login">
                   <Button variant="ghost" size="md" className="w-full" style={signInButtonStyle}>
                     Sign In

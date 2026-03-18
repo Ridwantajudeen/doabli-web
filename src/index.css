@@ -9,3 +9,18 @@ input, textarea, select, button {
 
 /* For very large desktop text scaling we keep layout consistent */
 body { -webkit-font-smoothing: antialiased; }
+
+:root {
+	--bg: #ffffff;
+	--nav: #f7f7fb;
+	--surface: #efeff5;
+	--text: #5a5866;
+	--title: #1f1c2b;
+	--brand: #6849a7;
+	--danger: #cc475a;
+}
+
+body {
+	background-color: var(--bg);
+	color: var(--text);
+}

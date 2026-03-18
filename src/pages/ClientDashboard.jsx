@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Menu } from 'lucide-react';
+import { X, Menu, Sun, Moon } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { ThemedView } from '../components/ThemedComponents';
@@ -12,9 +12,9 @@ import ClientProfile from './client/ClientProfile';
 import Support from './Support';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
-import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import BrandLogo from '../components/BrandLogo';
+import { useLocation } from 'react-router-dom';
 
 function useUnreadCount(userId) {
   const queryClient = useQueryClient();
@@ -58,10 +58,11 @@ function useUnreadCount(userId) {
 }
 
 export default function ClientDashboard() {
-  const { theme, Colors } = useTheme();
+  const { theme, Colors, isDark, toggleTheme } = useTheme();
   const { logout, user } = useAuth();
   const [activeTab, setActiveTab] = useState('home');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const location = useLocation();
 
   const unreadCount = useUnreadCount(user?.id);
 
@@ -71,12 +72,21 @@ export default function ClientDashboard() {
     setActiveTab(tabId);
     setMobileMenuOpen(false);
     if (tabId === 'notifications') {
-      // Optimistically clear the badge — the actual mark-as-read happens in the notifications page
+      // Optimistically clear the badge - the actual mark-as-read happens in the notifications page
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ['unread-count', user?.id] });
       }, 2000);
     }
   };
+
+  useEffect(() => {
+    const path = location.pathname;
+    if (path.startsWith('/client/errands')) setActiveTab('errands');
+    else if (path.startsWith('/client/messages')) setActiveTab('messages');
+    else if (path.startsWith('/client/notifications')) setActiveTab('notifications');
+    else if (path.startsWith('/client/profile')) setActiveTab('profile');
+    else if (path.startsWith('/client')) setActiveTab('home');
+  }, [location.pathname]);
 
   const tabs = [
     { id: 'home',          label: 'Home' },
@@ -143,6 +153,18 @@ export default function ClientDashboard() {
               )}
             </button>
           ))}
+          <button
+            onClick={toggleTheme}
+            className="p-2 rounded-full border transition"
+            style={{
+              borderColor: theme.uiBackground,
+              color: theme.text,
+            }}
+            aria-label="Toggle theme"
+            type="button"
+          >
+            {isDark ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
           <button
             onClick={logout}
             style={{
@@ -227,6 +249,25 @@ export default function ClientDashboard() {
                 )}
               </button>
             ))}
+            <button
+              onClick={toggleTheme}
+              style={{
+                background: theme.uiBackground,
+                border: 'none',
+                textAlign: 'left',
+                fontSize: '15px',
+                color: theme.text,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 8px',
+                borderRadius: '10px',
+              }}
+            >
+              {isDark ? <Sun size={16} /> : <Moon size={16} />}
+              {isDark ? 'Light mode' : 'Dark mode'}
+            </button>
             <button
               onClick={() => { logout(); setMobileMenuOpen(false); }}
               style={{

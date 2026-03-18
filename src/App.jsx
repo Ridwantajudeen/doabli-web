@@ -18,6 +18,7 @@ import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
 import DataPolicy from './pages/DataPolicy';
 import Refunds from './pages/Refunds';
+import About from './pages/About';
 
 // Client Pages
 import ClientDashboard from './pages/ClientDashboard';
@@ -75,6 +76,7 @@ function App() {
               <Route path="/terms" element={<Terms />} />
               <Route path="/data-policy" element={<DataPolicy />} />
               <Route path="/refunds" element={<Refunds />} />
+              <Route path="/about" element={<About />} />
               <Route
                 path="/complete-profile"
                 element={
