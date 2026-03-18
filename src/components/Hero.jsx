@@ -80,9 +80,10 @@ export default function Hero() {
             }}
             className="mt-6 text-lg leading-relaxed sm:text-xl"
           >
-            From quick pickups to daily tasks, Doabli connects you with trusted
-            runners who get things done without the stress. Clear budgets, safe
-            payments, and structured task flow built in.
+            From quick errands to home services, tech and digital work, and
+            everything in between, Doabli connects you with trusted people who
+            deliver without the stress. Clear budgets, safe payments, and a
+            structured task flow are built in.
           </p>
 
           <div

@@ -11,6 +11,7 @@ import {
   ClipboardCheck,
 } from 'lucide-react';
 import BrandLogo from '../components/BrandLogo';
+import Seo from '../components/Seo';
 import { useTheme } from '../context/ThemeContext';
 
 const fadeUp = {
@@ -68,6 +69,19 @@ const steps = [
   'The client confirms, and funds are released',
 ];
 
+const categories = [
+  'Everyday tasks and errands',
+  'Home services',
+  'Tech and digital services',
+  'Academic and professional help',
+  'Business and admin support',
+  'Transport and logistics',
+  'Creative and media',
+  'Lifestyle and personal services',
+  'Skilled trades',
+  'Anything reasonable',
+];
+
 const hexToRgba = (hex, alpha) => {
   const clean = hex.replace('#', '');
   const full = clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean;
@@ -110,6 +124,11 @@ export default function About() {
         '--about-primary-soft': accentGlowSoft,
       }}
     >
+      <Seo
+        title="About Doabli - Tasks, Services, and Skilled Work"
+        description="Doabli is a marketplace for errands, home services, tech and digital work, creative gigs, and more. Learn how we keep tasks structured and secure."
+        path="/about"
+      />
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Manrope:wght@300;400;500;600;700&display=swap');
         .about-page { font-family: 'Manrope', system-ui, sans-serif; background: var(--about-bg); color: var(--about-text); }
@@ -179,8 +198,9 @@ export default function About() {
           </h1>
           <p className="about-muted mt-5 text-lg leading-relaxed">
             Doabli is a digital marketplace that connects people who need help
-            with everyday tasks to reliable individuals who can complete them.
-            From small errands to more involved jobs, Doabli provides a
+            with everyday tasks, skilled services, and professional work to
+            reliable individuals who can complete them. From grocery runs to
+            web development, home services, and more, Doabli provides a
             structured and secure way for clients and runners to work together
             with confidence.
           </p>
@@ -273,6 +293,21 @@ export default function About() {
                 </li>
               ))}
             </ul>
+            <div className="mt-6">
+              <p className="text-sm font-semibold" style={{ color: theme.title }}>
+                Popular categories include:
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {categories.map((item) => (
+                  <span
+                    key={item}
+                    className="about-chip rounded-full px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em]"
+                  >
+                    {item}
+                  </span>
+                ))}
+              </div>
+            </div>
           </div>
           <div className="about-card rounded-[28px] p-8">
             <h3 className="about-title text-xl font-semibold">

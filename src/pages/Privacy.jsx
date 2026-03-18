@@ -1,9 +1,15 @@
 import { ThemedView, ThemedCard, ThemedText } from '../components/ThemedComponents';
 import { PRIVACY_POLICY_VERSION } from '../constants/policies';
+import Seo from '../components/Seo';
 
 export default function Privacy() {
   return (
     <ThemedView style={{ minHeight: '100vh', padding: '24px' }}>
+      <Seo
+        title="Doabli Privacy Policy"
+        description="Read the Doabli Privacy Policy and learn how we collect, use, and protect your data."
+        path="/privacy"
+      />
       <div style={{ maxWidth: '920px', margin: '0 auto' }}>
         <ThemedCard style={{ padding: '24px' }}>
           <ThemedText title style={{ fontSize: '28px', fontWeight: 700, marginBottom: '8px', display: 'block' }}>

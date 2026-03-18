@@ -70,7 +70,8 @@ export default function Features() {
             Built for trust, speed, and clarity.
           </h2>
           <p className="mx-auto max-w-2xl text-base sm:text-lg" style={{ color: theme.text }}>
-            Doabli removes the guesswork from errands by structuring payments,
+            Doabli removes the guesswork from errands, home services, tech and
+            digital work, creative gigs, and more by structuring payments,
             communication, and task tracking for both clients and runners.
           </p>
         </div>
@@ -103,14 +104,15 @@ export default function Features() {
           <div>
             <h3 className="text-2xl font-semibold">For Clients</h3>
             <p className="mt-3 text-sm" style={{ color: theme.text }}>
-              Post tasks confidently, set clear budgets, and pay securely through
+              Post anything from quick errands to tech projects, home services,
+              or creative work, set clear budgets, and pay securely through
               escrow. You stay in control from posting to confirmation.
             </p>
           </div>
           <div>
             <h3 className="text-2xl font-semibold">For Runners</h3>
             <p className="mt-3 text-sm" style={{ color: theme.text }}>
-              Apply for real opportunities, negotiate fairly, and build a
+              Apply for a wide range of tasks, negotiate fairly, and build a
               reputation in a trusted marketplace.
             </p>
           </div>

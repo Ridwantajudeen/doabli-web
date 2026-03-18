@@ -49,7 +49,7 @@ export default function Footer() {
           <div>
             <BrandLogo width={120} height={32} />
             <p className="text-sm opacity-75">
-              Your trusted platform for everyday errands.
+              Your trusted platform for tasks, services, and skilled work - and more.
             </p>
           </div>
 

@@ -8,6 +8,10 @@ export default function FAQ() {
 
   const faqs = [
     {
+      q: 'What kinds of tasks can I post?',
+      a: 'Errands, home services, tech and digital work, academic support, business admin, transport, creative work, lifestyle services, skilled trades, and more - anything reasonable within platform policies.',
+    },
+    {
       q: 'How do payments work?',
       a: 'Clients fund the task upfront. Funds are held in escrow and released only after the client confirms completion.',
     },

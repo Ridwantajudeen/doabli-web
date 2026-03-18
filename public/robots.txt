@@ -1,0 +1,14 @@
+User-agent: *
+Allow: /
+
+Disallow: /login
+Disallow: /signup
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /auth
+Disallow: /paystack-return
+Disallow: /client
+Disallow: /runner
+Disallow: /admin
+
+Sitemap: https://doabli.com/sitemap.xml

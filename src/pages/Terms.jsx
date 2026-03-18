@@ -1,9 +1,15 @@
 import { ThemedView, ThemedCard, ThemedText } from '../components/ThemedComponents';
 import { TERMS_OF_SERVICE_VERSION } from '../constants/policies';
+import Seo from '../components/Seo';
 
 export default function Terms() {
   return (
     <ThemedView style={{ minHeight: '100vh', padding: '24px' }}>
+      <Seo
+        title="Doabli Terms of Service"
+        description="Read the Doabli Terms of Service and learn the rules for using the platform."
+        path="/terms"
+      />
       <div style={{ maxWidth: '920px', margin: '0 auto' }}>
         <ThemedCard style={{ padding: '24px' }}>
           <ThemedText title style={{ fontSize: '28px', fontWeight: 700, marginBottom: '8px', display: 'block' }}>

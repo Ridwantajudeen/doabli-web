@@ -1,8 +1,14 @@
 import { ThemedView, ThemedCard, ThemedText } from '../components/ThemedComponents';
+import Seo from '../components/Seo';
 
 export default function Refunds() {
   return (
     <ThemedView style={{ minHeight: '100vh', padding: '24px' }}>
+      <Seo
+        title="Doabli Refund Policy"
+        description="Read the Doabli Refund Policy and understand how refunds are handled."
+        path="/refunds"
+      />
       <div style={{ maxWidth: '920px', margin: '0 auto' }}>
         <ThemedCard style={{ padding: '24px' }}>
           <ThemedText title style={{ fontSize: '28px', fontWeight: 700, marginBottom: '8px', display: 'block' }}>
