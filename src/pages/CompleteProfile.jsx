@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { updateProfile } from '../lib/supabase';
@@ -22,6 +22,7 @@ export default function CompleteProfile() {
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
   const [role, setRole] = useState('client');
+  const [acceptTerms, setAcceptTerms] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
@@ -55,6 +56,7 @@ export default function CompleteProfile() {
     if (!lastName.trim()) nextErrors.lastName = 'Last name is required.';
     if (!validatePhone(phone)) nextErrors.phone = 'Enter a valid phone number.';
     if (!role) nextErrors.role = 'Select your role.';
+    if (!acceptTerms) nextErrors.terms = 'You must agree to the policies to continue.';
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
@@ -279,6 +281,42 @@ export default function CompleteProfile() {
                 </ThemedCard>
               </div>
             )}
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={acceptTerms}
+                  onChange={(e) => {
+                    setAcceptTerms(e.target.checked);
+                    if (errors.terms) {
+                      setErrors((prev) => ({ ...prev, terms: null }));
+                    }
+                  }}
+                  style={{ marginTop: '4px' }}
+                />
+                <span style={{ fontSize: '13px', opacity: 0.8 }}>
+                  I agree to the{' '}
+                  <Link to="/terms" style={{ color: Colors.primary }}>
+                    Terms of Service
+                  </Link>
+                  ,{' '}
+                  <Link to="/privacy" style={{ color: Colors.primary }}>
+                    Privacy Policy
+                  </Link>
+                  , and{' '}
+                  <Link to="/data-policy" style={{ color: Colors.primary }}>
+                    Data Policy
+                  </Link>
+                  .
+                </span>
+              </label>
+              {errors.terms && (
+                <ThemedText style={{ color: Colors.warning, fontSize: '13px', marginTop: '6px', display: 'block' }}>
+                  {errors.terms}
+                </ThemedText>
+              )}
+            </div>
 
             <Button
               variant="primary"
