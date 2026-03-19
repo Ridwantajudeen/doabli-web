@@ -1,5 +1,6 @@
 import './App.css';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider } from './context/AuthContext';
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query';
@@ -56,6 +57,17 @@ function App() {
   const hideFooter =
     location.pathname.startsWith('/client/chat') ||
     location.pathname.startsWith('/runner/chat');
+
+  useEffect(() => {
+    if (location.hash) {
+      const target = document.querySelector(location.hash);
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth' });
+        return;
+      }
+    }
+    window.scrollTo(0, 0);
+  }, [location.pathname, location.hash]);
 
   return (
     <QueryClientProvider client={queryClient}>

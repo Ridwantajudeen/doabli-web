@@ -292,12 +292,9 @@ export default function RunnerHome() {
               key={errand.id}
               clickable
               onClick={() => navigate(`/runner/job-details/${errand.id}`)}
+              className="runner-errand-card"
               style={{
                 cursor: 'pointer',
-                display: 'grid',
-                gridTemplateColumns: '1fr auto',
-                gap: '16px',
-                alignItems: 'start',
               }}
             >
               <div>
@@ -339,11 +336,11 @@ export default function RunnerHome() {
 
                 <div style={{ display: 'flex', gap: '16px', fontSize: '13px', color: theme.text }}>
                   <span>Location: {errand.location}</span>
-                  <span>Posted: {new Date(errand.created_at).toLocaleDateString()}</span>
                 </div>
               </div>
 
               <div
+                className="runner-errand-card__budget"
                 style={{
                   backgroundColor: Colors.primary,
                   color: 'white',

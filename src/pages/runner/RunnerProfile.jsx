@@ -23,6 +23,7 @@ export default function RunnerProfile({ onOpenSupport }) {
   const [isEditing, setIsEditing] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [withdrawalsVisibleCount, setWithdrawalsVisibleCount] = useState(3);
   const [showKYCModal, setShowKYCModal] = useState(false);
 
   // Services management state
@@ -116,7 +117,7 @@ export default function RunnerProfile({ onOpenSupport }) {
         `)
         .eq('profile_id', profile.id)
         .order('created_at', { ascending: false })
-        .limit(10);
+          .limit(50);
 
       if (error) throw error;
       return data || [];
@@ -1603,9 +1604,9 @@ export default function RunnerProfile({ onOpenSupport }) {
             Withdrawal History ({withdrawalHistory.length})
           </ThemedText>
 
-          <div style={{ display: 'grid', gap: '12px' }}>
-            {withdrawalHistory.map((withdrawal) => (
-              <div key={withdrawal.id} style={{ padding: '12px', backgroundColor: theme.background, borderRadius: '8px', borderLeft: `3px solid ${withdrawal.status === 'success' ? '#22c55e' : withdrawal.status === 'pending' ? Colors.warning : Colors.error}` }}>
+            <div style={{ display: 'grid', gap: '12px' }}>
+              {withdrawalHistory.slice(0, withdrawalsVisibleCount).map((withdrawal) => (
+                <div key={withdrawal.id} style={{ padding: '12px', backgroundColor: theme.background, borderRadius: '8px', borderLeft: `3px solid ${withdrawal.status === 'success' ? '#22c55e' : withdrawal.status === 'pending' ? Colors.warning : Colors.error}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '8px' }}>
                   <div>
                     <ThemedText title style={{ fontSize: '18px', fontWeight: '600', marginBottom: '4px', display: 'block', color: withdrawal.status === 'success' ? '#22c55e' : Colors.text }}>
@@ -1629,16 +1630,27 @@ export default function RunnerProfile({ onOpenSupport }) {
                 <ThemedText style={{ fontSize: '11px', opacity: 0.5, display: 'block', fontFamily: 'monospace' }}>
                   Ref: {withdrawal.reference}
                 </ThemedText>
-                {withdrawal.paystack_transfer_code && (
-                  <ThemedText style={{ fontSize: '11px', opacity: 0.5, display: 'block', fontFamily: 'monospace' }}>
-                    Paystack ID: {withdrawal.paystack_transfer_code}
-                  </ThemedText>
-                )}
+                  {withdrawal.paystack_transfer_code && (
+                    <ThemedText style={{ fontSize: '11px', opacity: 0.5, display: 'block', fontFamily: 'monospace' }}>
+                      Paystack ID: {withdrawal.paystack_transfer_code}
+                    </ThemedText>
+                  )}
+                </div>
+              ))}
+            </div>
+            {withdrawalHistory.length > withdrawalsVisibleCount && (
+              <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'center' }}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setWithdrawalsVisibleCount((prev) => prev + 5)}
+                >
+                  Show more
+                </Button>
               </div>
-            ))}
-          </div>
-        </ThemedCard>
-      )}
+            )}
+          </ThemedCard>
+        )}
 
       {/* Reviews */}
       {reviews.length > 0 && (

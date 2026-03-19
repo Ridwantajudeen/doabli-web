@@ -57,7 +57,7 @@ function useUnreadCount(userId) {
 
 export default function RunnerDashboard() {
   const { theme, Colors, isDark, toggleTheme } = useTheme();
-  const { logout, user } = useAuth();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('home');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const queryClient = useQueryClient();
@@ -109,12 +109,12 @@ export default function RunnerDashboard() {
       {/* NAV */}
       <nav
         className="w-full flex justify-between items-center px-4 py-3 md:px-6 md:py-4 sticky top-0 z-50"
-        style={{ backgroundColor: theme.navBackground, borderBottom: `1px solid ${theme.uiBackground}` }}
+        style={{ backgroundColor: theme.navBackground, borderBottom: `1px solid ${theme.uiBackground}`, justifyContent: 'flex-start' }}
       >
         <BrandLogo width={110} height={28} />
 
         {/* Desktop Nav */}
-        <div className="hidden md:flex items-center gap-6">
+        <div className="hidden md:flex items-center gap-6" style={{ marginLeft: 'auto' }}>
           {tabs.map(tab => (
             <button
               key={tab.id}
@@ -152,17 +152,10 @@ export default function RunnerDashboard() {
           >
             {isDark ? <Sun size={18} /> : <Moon size={18} />}
           </button>
-          <button
-            onClick={logout}
-            className="px-4 py-2 rounded-lg text-white"
-            style={{ backgroundColor: Colors.warning }}
-          >
-            Logout
-          </button>
         </div>
 
         {/* Mobile Hamburger */}
-        <div style={{ position: 'relative' }}>
+        <div style={{ position: 'relative', marginLeft: 'auto' }}>
           <button
             className="md:hidden p-2 bg-zinc-800 text-white rounded-full"
             onClick={() => setMobileMenuOpen(prev => !prev)}
@@ -251,22 +244,6 @@ export default function RunnerDashboard() {
             >
               {isDark ? <Sun size={16} /> : <Moon size={16} />}
               {isDark ? 'Light mode' : 'Dark mode'}
-            </button>
-            <button
-              onClick={() => { logout(); setMobileMenuOpen(false); }}
-              style={{
-                marginTop: '8px',
-                padding: '10px 12px',
-                backgroundColor: Colors.warning,
-                border: 'none',
-                color: '#fff',
-                borderRadius: '10px',
-                fontSize: '15px',
-                cursor: 'pointer',
-                width: '100%',
-              }}
-            >
-              Logout
             </button>
           </motion.div>
         )}

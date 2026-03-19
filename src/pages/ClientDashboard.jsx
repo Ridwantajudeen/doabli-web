@@ -59,7 +59,7 @@ function useUnreadCount(userId) {
 
 export default function ClientDashboard() {
   const { theme, Colors, isDark, toggleTheme } = useTheme();
-  const { logout, user } = useAuth();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('home');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
@@ -118,7 +118,7 @@ export default function ClientDashboard() {
           backgroundColor: theme.navBackground,
           borderBottom: `1px solid ${theme.uiBackground}`,
           display: 'flex',
-          justifyContent: 'space-between',
+          justifyContent: 'flex-start',
           alignItems: 'center',
           position: 'sticky',
           top: 0,
@@ -128,7 +128,7 @@ export default function ClientDashboard() {
         <BrandLogo width={110} height={28} />
 
         {/* DESKTOP NAV */}
-        <div className="hidden md:flex gap-6 items-center">
+        <div className="hidden md:flex gap-6 items-center" style={{ marginLeft: 'auto' }}>
           {tabs.map(tab => (
             <button
               key={tab.id}
@@ -165,19 +165,10 @@ export default function ClientDashboard() {
           >
             {isDark ? <Sun size={18} /> : <Moon size={18} />}
           </button>
-          <button
-            onClick={logout}
-            style={{
-              marginLeft: '12px', padding: '8px 14px', backgroundColor: Colors.warning,
-              border: 'none', color: '#fff', borderRadius: '8px', cursor: 'pointer', fontSize: '14px',
-            }}
-          >
-            Logout
-          </button>
         </div>
 
         {/* MOBILE HAMBURGER */}
-        <div style={{ position: 'relative' }}>
+        <div style={{ position: 'relative', marginLeft: 'auto' }}>
           <button
             className="md:hidden p-2 bg-zinc-800 text-white rounded-full"
             onClick={() => setMobileMenuOpen(prev => !prev)}
@@ -267,22 +258,6 @@ export default function ClientDashboard() {
             >
               {isDark ? <Sun size={16} /> : <Moon size={16} />}
               {isDark ? 'Light mode' : 'Dark mode'}
-            </button>
-            <button
-              onClick={() => { logout(); setMobileMenuOpen(false); }}
-              style={{
-                marginTop: '8px',
-                padding: '10px 12px',
-                backgroundColor: Colors.warning,
-                border: 'none',
-                color: '#fff',
-                borderRadius: '10px',
-                cursor: 'pointer',
-                fontSize: '15px',
-                width: '100%',
-              }}
-            >
-              Logout
             </button>
           </motion.div>
         )}

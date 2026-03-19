@@ -5,6 +5,7 @@ const DEFAULT_TITLE = 'Doabli - Tasks, Services, and Skilled Work';
 const DEFAULT_DESCRIPTION =
   'Doabli connects clients with trusted people for errands, home services, tech and digital work, creative gigs, and more.';
 const DEFAULT_IMAGE = '/doabli-home.jpg';
+const DEFAULT_TWITTER_SITE = '@doabliapp';
 
 export default function Seo({
   title = DEFAULT_TITLE,
@@ -13,6 +14,7 @@ export default function Seo({
   image = DEFAULT_IMAGE,
   type = 'website',
   noIndex = false,
+  twitterSite = DEFAULT_TWITTER_SITE,
   schema = [],
 }) {
   const canonical = path.startsWith('http') ? path : `${SITE_URL}${path}`;
@@ -56,6 +58,7 @@ export default function Seo({
     setMeta('meta[property="og:image"]', { property: 'og:image', content: resolvedImage });
 
     setMeta('meta[name="twitter:card"]', { name: 'twitter:card', content: 'summary_large_image' });
+    setMeta('meta[name="twitter:site"]', { name: 'twitter:site', content: twitterSite });
     setMeta('meta[name="twitter:title"]', { name: 'twitter:title', content: title });
     setMeta('meta[name="twitter:description"]', { name: 'twitter:description', content: description });
     setMeta('meta[name="twitter:image"]', { name: 'twitter:image', content: resolvedImage });
@@ -70,7 +73,7 @@ export default function Seo({
       script.text = JSON.stringify(item);
       document.head.appendChild(script);
     });
-  }, [title, description, canonical, resolvedImage, type, noIndex, schema]);
+  }, [title, description, canonical, resolvedImage, type, noIndex, twitterSite, schema]);
 
   return null;
 }

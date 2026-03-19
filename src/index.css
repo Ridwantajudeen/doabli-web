@@ -24,3 +24,21 @@ body {
 	background-color: var(--bg);
 	color: var(--text);
 }
+
+.runner-errand-card {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	gap: 16px;
+	align-items: start;
+}
+
+@media (max-width: 640px) {
+	.runner-errand-card {
+		grid-template-columns: 1fr;
+	}
+
+	.runner-errand-card__budget {
+		width: 100%;
+		text-align: left;
+	}
+}
