@@ -18,6 +18,7 @@ import { getApiBase } from '../../lib/apiBase';
 const STATUS_CONFIG = {
   posted:          { color: '#3b82f6', label: 'Posted',           icon: <FiClock /> },
   offered:         { color: '#a855f7', label: 'Offer Sent',       icon: <FiClock /> },
+  pending_payment: { color: '#f59e0b', label: 'Pending Payment',  icon: <FiClock /> },
   pending_funding: { color: '#f59e0b', label: 'Awaiting Payment', icon: <FiClock /> },
   assigned:        { color: '#f59e0b', label: 'Assigned',         icon: <FiUser />  },
   completed:       { color: '#22c55e', label: 'Completed',        icon: <FiCheck /> },
@@ -551,6 +552,51 @@ export default function ErrandDetails() {
     },
   });
 
+  const retryPaymentMutation = useMutation({
+    mutationFn: async () => {
+      if (!id) throw new Error('Errand not loaded yet');
+      const token = (await supabase.auth.getSession()).data.session?.access_token;
+      if (!token) throw new Error('Authentication required');
+
+      const callbackUrl = `${window.location.origin}/paystack-return`;
+      const res = await fetch(`${apiBase}/api/errands/${id}/retry-payment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ callback_url: callbackUrl }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || 'Failed to retry payment');
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (data?.payment_url) {
+        try {
+          const context = {
+            reference: data.reference,
+            escrow_id: data.escrow_id,
+            errand_id: data.errand_id,
+            type: 'errand_posting',
+          };
+          sessionStorage.setItem('paystack_context', JSON.stringify(context));
+        } catch {
+          // ignore storage errors
+        }
+        window.location.href = data.payment_url;
+        return;
+      }
+      showError('generic', 'Payment URL not returned');
+    },
+    onError: (err) => {
+      showError('retry-payment', err?.message || 'Failed to retry payment');
+    },
+  });
+
   // Poll for status update after returning from Paystack redirect (fallback for redirect flow)
   useEffect(() => {
     if (!id) return;
@@ -907,6 +953,29 @@ export default function ErrandDetails() {
             style={{ width: '100%', backgroundColor: '#22c55e' }}
           >
             {fundMutation.isPending ? 'Processing...' : 'Fund Errand Now'}
+          </Button>
+        </ThemedCard>
+      )}
+
+      {/* Retry Payment - Show when errand posting is awaiting payment */}
+      {!directHireApp && errand?.status === 'pending_payment' && escrow?.status === 'pending_payment' && (
+        <ThemedCard style={{ marginBottom: '24px', backgroundColor: '#f59e0b20', borderLeft: '4px solid #f59e0b' }}>
+          <ThemedText
+            title
+            style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px', display: 'block', color: '#f59e0b' }}
+          >
+            Payment Required
+          </ThemedText>
+          <ThemedText style={{ fontSize: '14px', opacity: 0.8, display: 'block', marginBottom: '16px' }}>
+            Your errand hasn’t been funded yet. Complete payment to make it visible to runners.
+          </ThemedText>
+          <Button
+            variant="primary"
+            onClick={() => retryPaymentMutation.mutate()}
+            disabled={retryPaymentMutation.isPending}
+            style={{ width: '100%', backgroundColor: '#f59e0b' }}
+          >
+            {retryPaymentMutation.isPending ? 'Opening payment...' : 'Retry Payment'}
           </Button>
         </ThemedCard>
       )}

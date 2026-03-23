@@ -116,7 +116,7 @@ export default function Login() {
     try {
       const { error } = await loginWithGoogle();
       if (error) {
-        setServerMessage(error);
+        setServerMessage(friendlyMessage('login', error));
       }
     } finally {
       setOauthLoading(false);

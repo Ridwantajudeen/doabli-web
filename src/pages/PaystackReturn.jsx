@@ -14,7 +14,8 @@ export default function PaystackReturn() {
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    const reference = params.get('reference');
+    const reference = params.get('reference') || params.get('tx_ref');
+    const transactionId = params.get('transaction_id');
     const shouldVerify = reference || sessionStorage.getItem('paystack_context');
 
     if (!shouldVerify) {
@@ -58,6 +59,7 @@ export default function PaystackReturn() {
           if (context.errand_id) query.set('errand_id', context.errand_id);
           if (context.type) query.set('type', context.type);
         }
+        if (transactionId) query.set('transaction_id', transactionId);
 
         const refToUse = reference || context?.reference;
         if (!refToUse) {

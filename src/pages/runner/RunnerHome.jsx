@@ -41,13 +41,14 @@ export default function RunnerHome() {
     if (status === 'assigned') return 'assigned';
     if (status === 'completed') return 'completed';
     if (status === 'in_progress') return 'assigned';
-    if (status === 'pending_payment') return 'available';
+    if (status === 'pending_payment') return 'pending_payment';
     return status;
   };
 
   const statusLabel = (status) => {
     if (status === 'assigned' || status === 'in_progress') return 'Assigned';
     if (status === 'completed') return 'Completed';
+    if (status === 'pending_payment') return 'Pending Payment';
     return 'Available';
   };
 
@@ -74,7 +75,7 @@ export default function RunnerHome() {
     };
   };
 
-  const isAvailableStatus = (status) => !['assigned', 'completed'].includes(status);
+  const isAvailableStatus = (status) => !['assigned', 'completed', 'pending_payment'].includes(status);
 
   const displayedErrands = useMemo(() => {
     let filtered = errands.filter((errand) => {
@@ -95,6 +96,7 @@ export default function RunnerHome() {
         errand.location.toLowerCase().includes(locationFilter.toLowerCase());
 
       const normalized = normalizeStatus(errand.status);
+      if (normalized === 'pending_payment') return false;
       const matchesStatus =
         statusFilter === 'all' ||
         (statusFilter === 'available' && isAvailableStatus(normalized)) ||

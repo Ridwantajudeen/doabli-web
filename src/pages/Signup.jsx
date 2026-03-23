@@ -212,7 +212,7 @@ export default function Signup() {
     try {
       const { error } = await loginWithGoogle();
       if (error) {
-        setServerMessage(error);
+        setServerMessage(friendlyMessage('signup', error));
       }
     } finally {
       setOauthLoading(false);

@@ -75,6 +75,7 @@ export default function AdminDashboard() {
   const [kycAdminNotes, setKycAdminNotes] = useState('');
   const [adminNotes, setAdminNotes] = useState('');
   const [systemSettings, setSystemSettings] = useState(null);
+  const [paymentProvider, setPaymentProvider] = useState(null);
   const [kycFilter, setKycFilter] = useState('pending');
   const [bankAccountFilter, setBankAccountFilter] = useState('pending');
   const [reviewingBankAccount, setReviewingBankAccount] = useState(null);
@@ -356,6 +357,16 @@ export default function AdminDashboard() {
     },
   });
 
+  const { data: paymentProviderData, isLoading: paymentProviderLoading, refetch: refetchPaymentProvider } = useQuery({
+    queryKey: ['adminPaymentProvider'],
+    queryFn: () => api('/admin/payment-provider'),
+    enabled: activeTab === 'settings' && canSuper,
+    ...adminQueryDefaults,
+    onSuccess: (data) => {
+      if (data?.collection_provider) setPaymentProvider(data.collection_provider);
+    },
+  });
+
   const { data: pinStatusData, isLoading: pinStatusLoading, refetch: refetchPinStatus } = useQuery({
     queryKey: ['adminPinStatus'],
     queryFn: () => api('/admin/security/pin-status'),
@@ -452,6 +463,21 @@ export default function AdminDashboard() {
         refetchSettings();
       }
       showSuccess('Settings updated successfully!');
+    },
+  });
+
+  const updatePaymentProviderMutation = useMutation({
+    mutationFn: async ({ provider, pin }) =>
+      api('/admin/payment-provider', { method: 'PATCH', body: JSON.stringify({ collection_provider: provider, pin }) }),
+    onSuccess: (data, variables) => {
+      const nextProvider = data?.settings?.collection_provider || variables?.provider;
+      if (nextProvider) setPaymentProvider(nextProvider);
+      showSuccess('Payment provider updated');
+      refetchPaymentProvider();
+      refetchAudits();
+    },
+    onError: (err) => {
+      showError('payment-provider', err);
     },
   });
 
@@ -3492,6 +3518,7 @@ export default function AdminDashboard() {
   // RENDER: Settings
   const renderSettings = () => {
     const currentSettings = systemSettings || settingsDataFromAPI || {};
+    const currentProvider = paymentProvider || paymentProviderData?.collection_provider || 'paystack';
     
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '600px' }}>
@@ -3500,6 +3527,47 @@ export default function AdminDashboard() {
         ) : (
           <>
             {canFinance && renderAdminPinCard()}
+            <div style={{ background: Colors.cardBackground, border: `1px solid ${Colors.border}`, borderRadius: '12px', padding: '24px' }}>
+              <h3 style={{ color: Colors.text, marginBottom: '8px', fontSize: '18px', fontWeight: '700' }}>Payment Gateway (Collections)</h3>
+              <p style={{ color: Colors.muted, fontSize: '13px', marginBottom: '16px' }}>
+                Switch the provider used for new incoming payments. This does not affect existing transactions.
+              </p>
+              {paymentProviderLoading ? (
+                <p style={{ color: Colors.muted, fontSize: '13px' }}>Loading payment provider...</p>
+              ) : (
+                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                  {['paystack', 'flutterwave'].map((provider) => {
+                    const isActive = currentProvider === provider;
+                    return (
+                      <button
+                        key={provider}
+                        onClick={() => {
+                          if (isActive) return;
+                          const pin = promptForPin(`switch payment gateway to ${provider}`);
+                          if (!pin) return;
+                          updatePaymentProviderMutation.mutate({ provider, pin });
+                        }}
+                        disabled={updatePaymentProviderMutation.isPending}
+                        style={{
+                          padding: '10px 14px',
+                          borderRadius: '10px',
+                          border: `1px solid ${isActive ? Colors.primary : Colors.border}`,
+                          background: isActive ? Colors.primary : Colors.background,
+                          color: isActive ? 'white' : Colors.text,
+                          fontWeight: '600',
+                          fontSize: '14px',
+                          cursor: updatePaymentProviderMutation.isPending ? 'not-allowed' : 'pointer',
+                          opacity: updatePaymentProviderMutation.isPending ? 0.7 : 1,
+                          textTransform: 'capitalize',
+                        }}
+                      >
+                        {provider}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
             <div style={{ background: Colors.cardBackground, border: `1px solid ${Colors.border}`, borderRadius: '12px', padding: '24px' }}>
               <h3 style={{ color: Colors.text, marginBottom: '20px', fontSize: '18px', fontWeight: '700' }}>System Settings</h3>
               

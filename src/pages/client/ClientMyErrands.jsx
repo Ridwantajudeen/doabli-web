@@ -11,6 +11,8 @@ import { FiClock, FiUser, FiCheck, FiX, FiMapPin, FiCalendar, FiInbox } from 're
 const getStatusConfig = (status) => {
   const configs = {
     posted: { color: '#3b82f6', label: 'Posted', icon: FiClock },
+    pending_payment: { color: '#f59e0b', label: 'Pending Payment', icon: FiClock },
+    pending_funding: { color: '#f59e0b', label: 'Pending Payment', icon: FiClock },
     assigned: { color: '#f59e0b', label: 'Assigned', icon: FiUser },
     completed: { color: '#22c55e', label: 'Completed', icon: FiCheck },
     canceled: { color: '#ef4444', label: 'Canceled', icon: FiX },
