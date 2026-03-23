@@ -428,8 +428,8 @@ export default function AdminDashboard() {
 
   // ✅ UPDATED: Review KYC mutation
   const reviewKYCMutation = useMutation({
-    mutationFn: async ({ id, status, admin_notes, reason }) =>
-      api(`/admin/kyc/${id}/review`, { method: 'POST', body: JSON.stringify({ status, admin_notes, reason }) }),
+    mutationFn: async ({ id, status, admin_notes, reason, pin }) =>
+      api(`/admin/kyc/${id}/review`, { method: 'POST', body: JSON.stringify({ status, admin_notes, reason, pin }) }),
     onSuccess: () => {
       refetchKYC();
       refetchStats();
@@ -570,6 +570,7 @@ export default function AdminDashboard() {
       showSuccess('Reply sent');
       refetchSupport();
       refetchSupportDetail();
+      refetchStats();
       setSupportReply('');
     },
     onError: (err) => {
@@ -638,6 +639,15 @@ export default function AdminDashboard() {
     }
     return cleaned;
   }, []);
+
+  const getTabBadgeCount = (key) => {
+    if (key === 'disputes') return stats.disputes || 0;
+    if (key === 'kyc') return stats.pendingKycRequests || 0;
+    if (key === 'bank-accounts') return stats.pendingBankAccounts || 0;
+    if (key === 'withdrawals') return stats.pendingWithdrawals || 0;
+    if (key === 'support') return stats.openSupportMessages || 0;
+    return 0;
+  };
 
   const renderAdminPinCard = () => {
     const hasPin = !!pinStatus?.has_pin;
@@ -910,6 +920,10 @@ export default function AdminDashboard() {
     platformFeeTotal: 0,
     runnerEarningsTotal: 0,
     payoutsTotal: 0,
+    pendingWithdrawals: 0,
+    pendingBankAccounts: 0,
+    pendingKycRequests: 0,
+    openSupportMessages: 0,
     monthly: [],
   };
 
@@ -3379,12 +3393,17 @@ export default function AdminDashboard() {
             {/* Action Buttons */}
             <div style={{ display: 'flex', gap: '8px' }}>
               <button
-                onClick={() => reviewKYCMutation.mutate({
-                  id: reviewingKYC.id,
-                  status: 'approved',
-                  admin_notes: kycAdminNotes,
-                  reason: null,
-                })}
+                onClick={() => {
+                  const pin = promptForPin('approve this KYC');
+                  if (!pin) return;
+                  reviewKYCMutation.mutate({
+                    id: reviewingKYC.id,
+                    status: 'approved',
+                    admin_notes: kycAdminNotes,
+                    reason: null,
+                    pin,
+                  });
+                }}
                 disabled={reviewKYCMutation.isPending}
                 style={{
                   flex: 1,
@@ -3412,11 +3431,14 @@ export default function AdminDashboard() {
                     showError('validation', 'Please provide a rejection reason');
                     return;
                   }
+                  const pin = promptForPin('reject this KYC');
+                  if (!pin) return;
                   reviewKYCMutation.mutate({
                     id: reviewingKYC.id,
                     status: 'rejected',
                     admin_notes: kycAdminNotes,
                     reason: kycReviewReason,
+                    pin,
                   });
                 }}
                 disabled={reviewKYCMutation.isPending || !kycReviewReason}
@@ -4846,9 +4868,27 @@ export default function AdminDashboard() {
                 fontSize: '14px',
                 whiteSpace: 'nowrap',
                 transition: 'all 0.2s',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
               }}
             >
               {tab.label}
+              {getTabBadgeCount(tab.key) > 0 && (
+                <span
+                  style={{
+                    background: '#ef4444',
+                    color: 'white',
+                    borderRadius: '999px',
+                    padding: '2px 8px',
+                    fontSize: '11px',
+                    fontWeight: '700',
+                    lineHeight: 1,
+                  }}
+                >
+                  {getTabBadgeCount(tab.key)}
+                </span>
+              )}
             </button>
           ))}
         </div>

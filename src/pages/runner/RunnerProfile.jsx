@@ -110,6 +110,9 @@ export default function RunnerProfile({ onOpenSupport }) {
           status,
           reference,
           paystack_transfer_code,
+          payout_provider,
+          provider_transfer_code,
+          provider_status,
           created_at,
           processed_at,
           escrow_id,
@@ -129,11 +132,18 @@ export default function RunnerProfile({ onOpenSupport }) {
   const { isLoading: banksLoading } = useQuery({
     queryKey: ['banks'],
     queryFn: async () => {
-      const response = await fetch(`${apiBase}/api/bank/list`);
+      const response = await fetch(`${apiBase}/api/bank/list?provider=kuda`);
       if (!response.ok) throw new Error('Failed to fetch banks');
       const data = await response.json();
-      setBanksList(data.data || []);
-      return data.data || [];
+      const rawList = Array.isArray(data.data)
+        ? data.data
+        : Array.isArray(data?.data?.banks)
+        ? data.data.banks
+        : Array.isArray(data?.banks)
+        ? data.banks
+        : [];
+      setBanksList(rawList || []);
+      return rawList || [];
     },
   });
 
@@ -349,7 +359,7 @@ export default function RunnerProfile({ onOpenSupport }) {
   useEffect(() => {
     if (bankAccount) {
       setBankAccountNumber(bankAccount.account_number || '');
-      setSelectedBankCode(bankAccount.bank_code || '');
+      setSelectedBankCode(bankAccount.bank_code_nip || bankAccount.bank_code || '');
       setSelectedBankName(bankAccount.bank_name || '');
       setBankAccountName(bankAccount.account_name || '');
       setBankStatus(bankAccount.status || 'pending');
@@ -444,7 +454,7 @@ export default function RunnerProfile({ onOpenSupport }) {
           'Content-Type': 'application/json',
           Authorization: token ? `Bearer ${token}` : undefined,
         },
-        body: JSON.stringify({ account_number, bank_code }),
+        body: JSON.stringify({ account_number, bank_code, provider: 'kuda' }),
       });
 
       if (!response.ok) {
@@ -525,6 +535,7 @@ export default function RunnerProfile({ onOpenSupport }) {
       await saveBankMutation.mutateAsync({
         account_number: bankAccountNumber,
         bank_code: selectedBankCode,
+        bank_code_nip: selectedBankCode,
         bank_name: selectedBankName,
         account_name: bankAccountName,
       });
@@ -608,10 +619,14 @@ export default function RunnerProfile({ onOpenSupport }) {
   };
 
   // Filter banks based on search query
-  const filteredBanks = banksList.filter(bank =>
-    bank.name.toLowerCase().includes(bankSearchQuery.toLowerCase()) ||
-    bank.code.includes(bankSearchQuery)
-  );
+  const getBankName = (bank) => bank?.name || bank?.bankName || '';
+  const getBankCode = (bank) => bank?.code || bank?.bankCode || '';
+  const normalizedQuery = (bankSearchQuery || '').toLowerCase();
+  const filteredBanks = banksList.filter((bank) => {
+    const name = getBankName(bank).toLowerCase();
+    const code = String(getBankCode(bank));
+    return name.includes(normalizedQuery) || code.includes(bankSearchQuery);
+  });
 
   const avgRating = profile?.average_rating || 0;
 
@@ -632,6 +647,11 @@ export default function RunnerProfile({ onOpenSupport }) {
     if (bankStatus === 'approved') return 'Approved';
     if (bankStatus === 'rejected') return 'Rejected';
     return 'Pending approval';
+  };
+
+  const getWithdrawalStatusLabel = (status) => {
+    if (status === 'success') return 'paid';
+    return status || 'pending';
   };
 
   // KYC helpers
@@ -1324,18 +1344,18 @@ export default function RunnerProfile({ onOpenSupport }) {
                     {filteredBanks.length > 0 ? (
                       filteredBanks.map((bank) => (
                         <div
-                          key={bank.code}
-                          onClick={() => handleSelectBank(bank.code, bank.name)}
+                          key={getBankCode(bank) || getBankName(bank)}
+                          onClick={() => handleSelectBank(getBankCode(bank), getBankName(bank))}
                           style={{
                             padding: '12px',
                             borderBottom: `1px solid ${Colors.border || '#eee'}`,
                             cursor: 'pointer',
-                            backgroundColor: selectedBankCode === bank.code ? Colors.primary + '20' : 'transparent',
+                            backgroundColor: selectedBankCode === getBankCode(bank) ? Colors.primary + '20' : 'transparent',
                             color: Colors.text,
                             fontSize: '14px',
                           }}
                         >
-                          <strong>{bank.name}</strong>
+                          <strong>{getBankName(bank)}</strong>
                         </div>
                       ))
                     ) : (
@@ -1606,7 +1626,7 @@ export default function RunnerProfile({ onOpenSupport }) {
 
             <div style={{ display: 'grid', gap: '12px' }}>
               {withdrawalHistory.slice(0, withdrawalsVisibleCount).map((withdrawal) => (
-                <div key={withdrawal.id} style={{ padding: '12px', backgroundColor: theme.background, borderRadius: '8px', borderLeft: `3px solid ${withdrawal.status === 'success' ? '#22c55e' : withdrawal.status === 'pending' ? Colors.warning : Colors.error}` }}>
+                <div key={withdrawal.id} style={{ padding: '12px', backgroundColor: theme.background, borderRadius: '8px', borderLeft: `3px solid ${withdrawal.status === 'success' ? '#22c55e' : ['pending', 'processing'].includes(withdrawal.status) ? Colors.warning : Colors.error}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '8px' }}>
                   <div>
                     <ThemedText title style={{ fontSize: '18px', fontWeight: '600', marginBottom: '4px', display: 'block', color: withdrawal.status === 'success' ? '#22c55e' : Colors.text }}>
@@ -1616,8 +1636,8 @@ export default function RunnerProfile({ onOpenSupport }) {
                       {new Date(withdrawal.created_at).toLocaleDateString()} • {new Date(withdrawal.created_at).toLocaleTimeString()}
                     </ThemedText>
                   </div>
-                  <div style={{ padding: '4px 8px', borderRadius: '4px', backgroundColor: withdrawal.status === 'success' ? '#22c55e20' : withdrawal.status === 'pending' ? Colors.warning + '20' : Colors.error + '20', fontSize: '11px', fontWeight: '600', textTransform: 'uppercase', color: withdrawal.status === 'success' ? '#22c55e' : withdrawal.status === 'pending' ? Colors.warning : Colors.error }}>
-                    {withdrawal.status}
+                  <div style={{ padding: '4px 8px', borderRadius: '4px', backgroundColor: withdrawal.status === 'success' ? '#22c55e20' : ['pending', 'processing'].includes(withdrawal.status) ? Colors.warning + '20' : Colors.error + '20', fontSize: '11px', fontWeight: '600', textTransform: 'uppercase', color: withdrawal.status === 'success' ? '#22c55e' : ['pending', 'processing'].includes(withdrawal.status) ? Colors.warning : Colors.error }}>
+                    {getWithdrawalStatusLabel(withdrawal.status)}
                   </div>
                 </div>
 
@@ -1630,9 +1650,9 @@ export default function RunnerProfile({ onOpenSupport }) {
                 <ThemedText style={{ fontSize: '11px', opacity: 0.5, display: 'block', fontFamily: 'monospace' }}>
                   Ref: {withdrawal.reference}
                 </ThemedText>
-                  {withdrawal.paystack_transfer_code && (
+                  {(withdrawal.provider_transfer_code || withdrawal.paystack_transfer_code) && (
                     <ThemedText style={{ fontSize: '11px', opacity: 0.5, display: 'block', fontFamily: 'monospace' }}>
-                      Paystack ID: {withdrawal.paystack_transfer_code}
+                      {(withdrawal.payout_provider || 'paystack').toUpperCase()} ID: {withdrawal.provider_transfer_code || withdrawal.paystack_transfer_code}
                     </ThemedText>
                   )}
                 </div>

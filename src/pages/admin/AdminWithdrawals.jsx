@@ -18,6 +18,7 @@ export default function AdminWithdrawals() {
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize] = useState(50);
+  const [providerByWithdrawal, setProviderByWithdrawal] = useState({});
   const apiBase = getApiBase();
   const adminQueryDefaults = {
     staleTime: 0,
@@ -70,7 +71,7 @@ export default function AdminWithdrawals() {
 
   // Approve withdrawal mutation
   const approveMutation = useMutation({
-    mutationFn: async ({ id, pin }) => {
+    mutationFn: async ({ id, pin, provider }) => {
       const apiUrl = apiBase;
       const token = (await supabase.auth.getSession()).data.session?.access_token || '';
 
@@ -80,7 +81,7 @@ export default function AdminWithdrawals() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ pin }),
+        body: JSON.stringify({ pin, provider }),
       });
 
       if (!response.ok) {
@@ -93,6 +94,7 @@ export default function AdminWithdrawals() {
     onSuccess: () => {
       showSuccess('Withdrawal approved successfully');
       queryClient.invalidateQueries({ queryKey: ['admin-withdrawals'] });
+      queryClient.invalidateQueries({ queryKey: ['adminStats'] });
     },
     onError: (err) => {
       showError('generic', err);
@@ -124,6 +126,7 @@ export default function AdminWithdrawals() {
     onSuccess: () => {
       showSuccess('Withdrawal rejected');
       queryClient.invalidateQueries({ queryKey: ['admin-withdrawals'] });
+      queryClient.invalidateQueries({ queryKey: ['adminStats'] });
     },
     onError: (err) => {
       showError('generic', err);
@@ -333,13 +336,13 @@ export default function AdminWithdrawals() {
                   <ThemedText style={{ fontSize: '12px', fontFamily: 'monospace', opacity: 0.8 }}>
                     {withdrawal.reference}
                   </ThemedText>
-                  {withdrawal.paystack_transfer_code && (
+                  {(withdrawal.provider_transfer_code || withdrawal.paystack_transfer_code) && (
                     <>
                       <ThemedText style={{ fontSize: '12px', opacity: 0.6, marginTop: '8px', marginBottom: '4px' }}>
-                        Paystack ID
+                        {(withdrawal.payout_provider || 'paystack').toUpperCase()} ID
                       </ThemedText>
                       <ThemedText style={{ fontSize: '12px', fontFamily: 'monospace', opacity: 0.8 }}>
-                        {withdrawal.paystack_transfer_code}
+                        {withdrawal.provider_transfer_code || withdrawal.paystack_transfer_code}
                       </ThemedText>
                     </>
                   )}
@@ -367,13 +370,41 @@ export default function AdminWithdrawals() {
                 {/* Action Buttons (only for pending) */}
                 {withdrawal.status === 'pending' && (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div style={{ marginBottom: '12px' }}>
+                      <ThemedText style={{ fontSize: '12px', opacity: 0.6, marginBottom: '6px', display: 'block' }}>
+                        Payout Provider
+                      </ThemedText>
+                      <select
+                        value={providerByWithdrawal[withdrawal.id] || 'kuda'}
+                        onChange={(e) =>
+                          setProviderByWithdrawal((prev) => ({
+                            ...prev,
+                            [withdrawal.id]: e.target.value,
+                          }))
+                        }
+                        style={{
+                          width: '100%',
+                          padding: '10px 12px',
+                          borderRadius: '8px',
+                          border: `1px solid ${Colors.border || '#ccc'}`,
+                          background: Colors.cardBackground,
+                          color: Colors.text,
+                          fontSize: '13px',
+                        }}
+                      >
+                        <option value="kuda">Kuda</option>
+                        <option value="paystack">Paystack</option>
+                      </select>
+                    </div>
+
                     <Button
                       variant="primary"
                       onClick={() => {
                         if (window.confirm('Approve this withdrawal?')) {
                           const pin = promptForPin('approve this withdrawal');
                           if (!pin) return;
-                          approveMutation.mutate({ id: withdrawal.id, pin });
+                          const provider = providerByWithdrawal[withdrawal.id] || 'kuda';
+                          approveMutation.mutate({ id: withdrawal.id, pin, provider });
                         }
                       }}
                       disabled={approveMutation.isPending}
