@@ -83,7 +83,7 @@ export default function CompleteProfile() {
         return;
       }
 
-      await loadProfile(user.id, user.email);
+      await loadProfile(user);
       const dashboard = isAdminRole(updated?.role)
         ? '/admin'
         : updated?.role === 'runner'

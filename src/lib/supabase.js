@@ -12,13 +12,20 @@ if (!supabaseUrl || !supabaseAnonKey) {
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Auth helpers
-export const signUpUser = async (email, password) => {
+export const signUpUser = async (email, password, metadata = {}) => {
   try {
+    const safeMeta = {
+      first_name: metadata.firstName || metadata.first_name || '',
+      last_name: metadata.lastName || metadata.last_name || '',
+      phone_number: metadata.phone || metadata.phone_number || '',
+      role: metadata.role || 'client',
+    };
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: `${window.location.origin}/auth/callback`,
+        data: safeMeta,
       },
     });
 
@@ -137,6 +144,22 @@ export const getCurrentSession = async () => {
     return { session: data.session, error: null };
   } catch (err) {
     return { session: null, error: err.message };
+  }
+};
+
+export const resendVerificationEmail = async (email) => {
+  try {
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+    if (error) throw new Error(error.message);
+    return { error: null };
+  } catch (err) {
+    return { error: err.message };
   }
 };
 

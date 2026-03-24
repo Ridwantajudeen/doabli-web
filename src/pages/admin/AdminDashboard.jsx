@@ -66,6 +66,7 @@ export default function AdminDashboard() {
   const [resolvingDispute, setResolvingDispute] = useState(null);
   const [disputeFilter, setDisputeFilter] = useState('all');
   const [paymentFilter, setPaymentFilter] = useState('all');
+  const [transactionsProviderFilter, setTransactionsProviderFilter] = useState('all');
   const [conversationOpen, setConversationOpen] = useState(false);
   const [conversationLoading, setConversationLoading] = useState(false);
   const [conversationError, setConversationError] = useState('');
@@ -120,10 +121,11 @@ export default function AdminDashboard() {
   const [selectedAudit, setSelectedAudit] = useState(null);
   const apiBase = getApiBase();
   const adminQueryDefaults = {
-    staleTime: 0,
-    refetchOnWindowFocus: true,
-    refetchOnReconnect: true,
-    refetchOnMount: 'always',
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+    keepPreviousData: true,
   };
 
   const getPageForTab = (tab) => tabPages?.[tab] || 1;
@@ -312,8 +314,8 @@ export default function AdminDashboard() {
   });
 
   const { data: transactionsData = { transactions: [], total: 0, page: 1 }, isLoading: transactionsLoading, refetch: refetchTransactions } = useQuery({
-    queryKey: ['adminTransactions', transactionsPage, getTabSearchQuery('transactions')],
-    queryFn: () => api(`/admin/transactions?page=${transactionsPage}&limit=${pageSize}${getTabSearchQuery('transactions') ? `&search=${encodeURIComponent(getTabSearchQuery('transactions'))}` : ''}`),
+    queryKey: ['adminTransactions', transactionsPage, transactionsProviderFilter, getTabSearchQuery('transactions')],
+    queryFn: () => api(`/admin/transactions?page=${transactionsPage}&limit=${pageSize}${transactionsProviderFilter && transactionsProviderFilter !== 'all' ? `&provider=${encodeURIComponent(transactionsProviderFilter)}` : ''}${getTabSearchQuery('transactions') ? `&search=${encodeURIComponent(getTabSearchQuery('transactions'))}` : ''}`),
     enabled: activeTab === 'transactions' && canFinance,
     ...adminQueryDefaults,
   });
@@ -2032,7 +2034,27 @@ export default function AdminDashboard() {
 
     return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      <div style={{ display: 'flex', gap: '12px' }}>
+      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+        <select
+          value={transactionsProviderFilter}
+          onChange={(e) => {
+            setTransactionsProviderFilter(e.target.value);
+            setPageForTab('transactions', 1);
+          }}
+          style={{
+            minWidth: '180px',
+            padding: '10px 12px',
+            borderRadius: '8px',
+            border: `1px solid ${Colors.border}`,
+            background: Colors.cardBackground,
+            color: Colors.text,
+            fontSize: '14px',
+          }}
+        >
+          <option value="all">All Providers</option>
+          <option value="paystack">Paystack</option>
+          <option value="flutterwave">Flutterwave</option>
+        </select>
         <div style={{ flex: 1, position: 'relative' }}>
           <Search size={16} style={{ position: 'absolute', left: '12px', top: '12px', color: Colors.muted }} />
           <input
@@ -2772,6 +2794,7 @@ export default function AdminDashboard() {
                   <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Type</th>
                   <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Amount</th>
                   <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Status</th>
+                  <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Provider</th>
                   <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Reference</th>
                   <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Paystack ID</th>
                   <th style={{ padding: '12px', textAlign: 'left', color: Colors.text, fontWeight: '600', fontSize: '12px' }}>Date</th>
@@ -2794,6 +2817,9 @@ export default function AdminDashboard() {
                       }}>
                         {tx.status}
                       </span>
+                    </td>
+                    <td style={{ padding: '12px', color: Colors.text, fontSize: '12px', textTransform: 'capitalize' }}>
+                      {tx.provider || '—'}
                     </td>
                     <td style={{ padding: '12px', color: Colors.text, fontSize: '12px', fontFamily: 'monospace' }}>
                       {tx.reference || 'â€”'}
@@ -4718,7 +4744,7 @@ export default function AdminDashboard() {
     );
   }
 
-  if (profileLoading) {
+  if (profileLoading && !profile) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: Colors.background }}>
         <div style={{ textAlign: 'center', padding: '40px' }}>

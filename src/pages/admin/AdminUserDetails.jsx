@@ -35,10 +35,11 @@ export default function AdminUserDetails() {
   const canSupport = adminLevel >= 1;
   const canFinance = adminLevel >= 2;
   const adminQueryDefaults = {
-    staleTime: 0,
-    refetchOnWindowFocus: true,
-    refetchOnReconnect: true,
-    refetchOnMount: 'always',
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+    keepPreviousData: true,
   };
 
   const { data, isLoading, error, refetch } = useQuery({
@@ -282,7 +283,7 @@ export default function AdminUserDetails() {
       case 'transactions': {
         const query = getSearchValue('transactions');
         const items = filteredItems(data.transactions || [], query, (t) =>
-          `${t.type || ''} ${t.status || ''} ${t.reference || ''} ${t.id}`.trim()
+          `${t.type || ''} ${t.status || ''} ${t.provider || ''} ${t.reference || ''} ${t.id}`.trim()
         );
         return (
           <SectionList
@@ -293,7 +294,7 @@ export default function AdminUserDetails() {
             renderItem={(t) => (
               <ItemRow
                 key={t.id}
-                primary={`${t.type} · ${formatNaira(t.amount)} · ${t.status}`}
+                primary={`${t.type} · ${formatNaira(t.amount)} · ${t.status} · ${(t.provider || 'paystack')}`}
                 secondary={t.reference || 'No reference'}
                 meta={t.escrow_id || t.id}
                 onClick={() => openDetails('transaction', t)}

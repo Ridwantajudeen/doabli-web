@@ -76,7 +76,12 @@ export default function Login() {
 
       if (error) {
         console.log('Login error:', error);
-        setServerMessage(error || 'Login failed. Try again.');
+        if (error === 'EMAIL_NOT_VERIFIED') {
+          setServerMessage('Please verify your email. You can resend the verification link.');
+          navigate(`/verify-email?email=${encodeURIComponent(email)}`, { replace: true });
+        } else {
+          setServerMessage(error || 'Login failed. Try again.');
+        }
         setLoading(false);
       } else if (!user) {
         console.log('No user returned');

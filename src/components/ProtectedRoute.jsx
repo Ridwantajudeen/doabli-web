@@ -5,7 +5,7 @@ import { ThemedLoader } from '../components/ThemedComponents';
 import { isAdminRole } from '../lib/adminAccess';
 
 export default function ProtectedRoute({ children, requiredRole, allowIncomplete = false }) {
-  const { user, profile, loading, profileLoading, isProfileComplete } = useAuth();
+  const { user, profile, loading, profileLoading, isProfileComplete, isEmailVerified } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -13,6 +13,12 @@ export default function ProtectedRoute({ children, requiredRole, allowIncomplete
     // Redirect to login if auth finished loading and no user
     if (!loading && !user) {
       navigate('/login', { replace: true });
+      return;
+    }
+
+    if (!loading && user && !isEmailVerified(user)) {
+      const emailParam = user?.email ? `?email=${encodeURIComponent(user.email)}` : '';
+      navigate(`/verify-email${emailParam}`, { replace: true });
       return;
     }
 
@@ -36,7 +42,7 @@ export default function ProtectedRoute({ children, requiredRole, allowIncomplete
         navigate(redirectPath, { replace: true });
       }
     }
-  }, [loading, profileLoading, user, profile, requiredRole, allowIncomplete, isProfileComplete, location.pathname, navigate]);
+  }, [loading, profileLoading, user, profile, requiredRole, allowIncomplete, isProfileComplete, isEmailVerified, location.pathname, navigate]);
 
   // Show loader only when we truly don't have a profile yet
   if (loading || (profileLoading && !profile)) {

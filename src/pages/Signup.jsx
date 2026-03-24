@@ -133,7 +133,13 @@ export default function Signup() {
       });
 
       if (error) {
-        setServerMessage(friendlyMessage('signup', error));
+        const normalized = String(error || '').toLowerCase();
+        if (normalized.includes('already') && normalized.includes('register')) {
+          setServerMessage('This email already exists. Please verify your email to continue.');
+          navigate(`/verify-email?email=${encodeURIComponent(email)}`, { replace: true });
+        } else {
+          setServerMessage(friendlyMessage('signup', error));
+        }
         console.error('Signup error:', error);
       } else if (!user) {
         setServerMessage('Signup failed. Please try again.');
@@ -165,7 +171,7 @@ export default function Signup() {
           console.warn('Policy acceptance record failed:', policyFailure.error);
         }
 
-        setServerMessage('Signup successful! We sent a verification link to your email. Open it to verify your account, then log in. Check your spam/junk if you do not see it.');
+        setServerMessage('Signup successful! We sent a verification link to your email. Open it to verify your account. Check your spam/junk if you do not see it.');
         setErrors({});
 
         // Reset form
@@ -178,10 +184,10 @@ export default function Signup() {
         setRole('client');
         setPoliciesAccepted(false);
 
-        // Navigate to dashboard or login after brief delay
+        // Send user to verify email screen
         setTimeout(() => {
-          navigate(profile?.role === 'runner' ? '/runner/home' : '/client/home');
-        }, 1500);
+          navigate(`/verify-email?email=${encodeURIComponent(email)}`, { replace: true });
+        }, 300);
       }
     } catch (err) {
       console.error('Signup exception:', err);

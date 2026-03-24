@@ -19,9 +19,27 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
 
+  const isEmailVerified = (authUser) =>
+    Boolean(authUser?.email_confirmed_at || authUser?.confirmed_at || authUser?.user_metadata?.email_verified);
+
+  const buildProfileSeed = (authUser) => {
+    const meta = authUser?.user_metadata || {};
+    return {
+      email: authUser?.email || meta.email || "",
+      firstName: meta.first_name || meta.firstName || "",
+      lastName: meta.last_name || meta.lastName || "",
+      phone: meta.phone_number || meta.phone || "",
+      role: meta.role || "client",
+    };
+  };
+
   // ✅ Load profile with timeout and auto-create if missing
-  const loadProfileAsync = async (userId, userEmail) => {
-    if (!userId) return null;
+  const loadProfileAsync = async (authUser) => {
+    if (!authUser?.id) return null;
+    if (!isEmailVerified(authUser)) {
+      setProfile(null);
+      return null;
+    }
 
     // Use a non-throwing timeout so we don't reject the race and cause an exception.
     // If fetching takes too long, the timeout will resolve with a null profile result.
@@ -31,7 +49,10 @@ export function AuthProvider({ children }) {
     );
 
     try {
-      const { profile: fetched, error } = await Promise.race([getProfile(userId, userEmail), timeoutPromise]);
+      const { profile: fetched, error } = await Promise.race([
+        getProfile(authUser.id, authUser.email),
+        timeoutPromise,
+      ]);
 
       if (error) {
         console.error("Error fetching profile:", error);
@@ -40,16 +61,8 @@ export function AuthProvider({ children }) {
 
       if (!fetched) {
         // ✅ Auto-create profile if it doesn't exist
-        const { profile: newProfile, error: createError } = await createProfile(
-          userId,
-          {
-            email: userEmail || user?.email || "",
-            firstName: "",
-            lastName: "",
-            phone: "",
-            role: "runner", // default role
-          }
-        );
+        const seed = buildProfileSeed(authUser);
+        const { profile: newProfile, error: createError } = await createProfile(authUser.id, seed);
         if (createError) {
           console.error("Error creating profile:", createError);
           return null;
@@ -73,7 +86,7 @@ export function AuthProvider({ children }) {
         const { session } = await getCurrentSession();
         if (session?.user) {
           setUser(session.user);
-          await loadProfileAsync(session.user.id, session.user.email);
+          await loadProfileAsync(session.user);
         }
       } catch (err) {
         console.error("Init session error:", err);
@@ -90,7 +103,7 @@ export function AuthProvider({ children }) {
           setUser(session.user);
           setProfileLoading(true);
           try {
-            await loadProfileAsync(session.user.id, session.user.email);
+            await loadProfileAsync(session.user);
           } finally {
             setProfileLoading(false);
           }
@@ -106,11 +119,11 @@ export function AuthProvider({ children }) {
   }, []);
 
   // Explicit profile loader (callable)
-  const loadProfile = async (userId, userEmail) => {
-    if (!userId) return null;
+  const loadProfile = async (authUser) => {
+    if (!authUser?.id) return null;
     setProfileLoading(true);
     try {
-      return await loadProfileAsync(userId, userEmail);
+      return await loadProfileAsync(authUser);
     } finally {
       setProfileLoading(false);
     }
@@ -120,29 +133,9 @@ export function AuthProvider({ children }) {
   const signup = async (email, password, userData) => {
     setLoading(true);
     try {
-      const { user: authUser, error } = await signUpUser(email, password);
+      const { user: authUser, error } = await signUpUser(email, password, userData);
       if (error) return { error };
-
-      const { profile: newProfile, error: profileError } = await createProfile(
-        authUser.id,
-        {
-          email,
-          firstName: userData.firstName,
-          lastName: userData.lastName,
-          phone: userData.phone,
-          role: userData.role,
-        }
-      );
-
-      if (profileError) {
-        console.error("Error creating profile:", profileError);
-        return { error: profileError };
-      }
-
-      setUser(authUser);
-      setProfile(newProfile);
-
-      return { user: authUser, profile: newProfile };
+      return { user: authUser, profile: null };
     } finally {
       setLoading(false);
     }
@@ -152,12 +145,25 @@ export function AuthProvider({ children }) {
     setLoading(true);
     try {
       const { user: authUser, error } = await loginUser(email, password);
-      if (error) return { error };
+      if (error) {
+        const normalized = String(error || '').toLowerCase();
+        if (normalized.includes('email') && normalized.includes('confirm')) {
+          return { error: "EMAIL_NOT_VERIFIED" };
+        }
+        return { error };
+      }
+
+      if (!isEmailVerified(authUser)) {
+        await supabase.auth.signOut();
+        setUser(null);
+        setProfile(null);
+        return { error: "EMAIL_NOT_VERIFIED" };
+      }
 
       setUser(authUser);
 
       // ✅ Auto-create profile if missing
-      const fetchedProfile = await loadProfileAsync(authUser.id, authUser.email);
+      const fetchedProfile = await loadProfileAsync(authUser);
 
       return { user: authUser, profile: fetchedProfile };
     } finally {
@@ -197,6 +203,7 @@ export function AuthProvider({ children }) {
         profile,
         loading,
         profileLoading,
+        isEmailVerified,
         signup,
         login,
         loginWithGoogle,

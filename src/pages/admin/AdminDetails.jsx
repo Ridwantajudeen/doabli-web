@@ -18,10 +18,11 @@ export default function AdminDetails() {
   const { id } = useParams();
   const apiBase = getApiBase();
   const adminQueryDefaults = {
-    staleTime: 0,
-    refetchOnWindowFocus: true,
-    refetchOnReconnect: true,
-    refetchOnMount: 'always',
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+    keepPreviousData: true,
   };
 
   const [pinInput, setPinInput] = useState('');

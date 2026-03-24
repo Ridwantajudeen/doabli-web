@@ -13,6 +13,7 @@ import AuthCallback from './pages/AuthCallback';
 import EmailConfirmed from './pages/EmailConfirmed';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
+import VerifyEmail from './pages/VerifyEmail';
 import CompleteProfile from './pages/CompleteProfile';
 import PaystackReturn from './pages/PaystackReturn';
 import Privacy from './pages/Privacy';
@@ -83,6 +84,7 @@ function App() {
               <Route path="/email-confirmed" element={<EmailConfirmed />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/verify-email" element={<VerifyEmail />} />
               <Route path="/paystack-return" element={<PaystackReturn />} />
               <Route path="/privacy" element={<Privacy />} />
               <Route path="/terms" element={<Terms />} />
