@@ -61,10 +61,20 @@ function App() {
 
   useEffect(() => {
     if (location.hash) {
-      const target = document.querySelector(location.hash);
-      if (target) {
-        target.scrollIntoView({ behavior: 'smooth' });
-        return;
+      // Only treat hash as an element id when it's a safe selector.
+      // Auth redirects can include hashes like #access_token=..., which
+      // would throw in querySelector and blank the page.
+      const isSafeHash = /^#[A-Za-z][\w-]*$/.test(location.hash);
+      if (isSafeHash) {
+        try {
+          const target = document.querySelector(location.hash);
+          if (target) {
+            target.scrollIntoView({ behavior: 'smooth' });
+            return;
+          }
+        } catch {
+          // Ignore invalid selectors
+        }
       }
     }
     window.scrollTo(0, 0);
