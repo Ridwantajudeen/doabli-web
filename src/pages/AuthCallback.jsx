@@ -31,6 +31,8 @@ export default function AuthCallback() {
         return;
       }
 
+      const isVerificationFlow = type === 'signup' || Boolean(tokenHash);
+
       if (code) {
         const { error } = await exchangeAuthCode(code);
         if (error) {
@@ -68,7 +70,7 @@ export default function AuthCallback() {
 
       const provider = user.app_metadata?.provider;
 
-      if (type === 'signup' && provider === 'email') {
+      if (provider === 'email' && isVerificationFlow) {
         navigate('/email-confirmed', { replace: true });
         return;
       }
